@@ -29,6 +29,7 @@ FileInfo
 FileMerger
 GenericWrapper
 HighResPrecursorMassCorrector
+HighResChargeCorrector
 IDConflictResolver
 IDFileConverter
 IDFilter

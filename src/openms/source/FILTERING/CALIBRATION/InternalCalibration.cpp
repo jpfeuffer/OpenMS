@@ -190,7 +190,12 @@ namespace OpenMS
 
       PeptideIdentification pid = ids[0];
       pid.sort();
-      double mz_ref = pid.getHits()[0].getSequence().getMonoWeight(OpenMS::Residue::Full, pid.getHits()[0].getCharge());
+      // do not calibrate with IDs matched to non-monoisotopes (e.g. by MSGF+)
+      if (pid.getHits()[0].metaValueExists("IsotopeError") &&
+          (pid.getHits()[0].getMetaValue("IsotopeError") != "0")) continue;
+
+      int q = pid.getHits()[0].getCharge();
+      double mz_ref = pid.getHits()[0].getSequence().getMonoWeight(OpenMS::Residue::Full, q) / q;
       if (tol_ppm < Math::getPPMAbs(it->getMZ(), mz_ref)) continue;
       cal_data_.insertCalibrationPoint(it->getRT(), it->getMZ(), it->getIntensity(), mz_ref, log(it->getIntensity()));
     }
@@ -226,6 +231,10 @@ namespace OpenMS
       }
       PeptideIdentification pid = *it;
       pid.sort();
+      // do not calibrate with IDs matched to non-monoisotopes (e.g. by MSGF+)
+      if (pid.getHits()[0].metaValueExists("IsotopeError") &&
+          (pid.getHits()[0].getMetaValue("IsotopeError") != "0")) continue;
+
       int q = pid.getHits()[0].getCharge();
       double mz_ref = pid.getHits()[0].getSequence().getMonoWeight(OpenMS::Residue::Full, q) / q;
       if (tol_ppm < Math::getPPMAbs(it->getMZ(), mz_ref)) continue;

@@ -210,7 +210,7 @@ protected:
     registerDoubleOption_("sigma", "<float>", 5, "sigma of the POBK", false);
     registerDoubleOption_("total_gradient_time", "<time>", 1, "the time (in seconds) of the gradient (only for RT prediction)", false);
     setMinFloat_("total_gradient_time", 0.00001);
-    registerFlag_("first_dim_rt", "if set the model will be built for first_dim_rt");
+    registerFlag_("first_dim_rt", "if set the model will be built for the Metavalues stored in first_dim_rt (instead of the usual retention time attribute)");
     registerFlag_("additive_cv", "if the step sizes should be interpreted additively (otherwise the actual value is multiplied\nwith the step size to get the new value");
 
     addEmptyLine_();

@@ -148,36 +148,28 @@ namespace OpenMS
   svm_problem* LibSVMEncoder::encodeLibSVMProblem(const vector<svm_node*>& vectors,
                                                   vector<double>& labels)
   {
-    svm_problem* problem;
-    svm_node** node_vectors;
 
     if (labels.size() != vectors.size())
     {
       return NULL;
     }
 
-    problem = new svm_problem;
+    svm_problem* problem = new svm_problem;
     problem->l = (int) vectors.size();
+
     if (problem->l < 0) // dubious. Just makes sense if vectors.size() is larger than int and overflows
     {
       return NULL;
     }
 
+    problem->x = new svm_node*[problem->l];
     problem->y = new double[problem->l];
+
     for (Size i = 0; i < vectors.size(); ++i)
     {
+      problem->x[i] = vectors[i];
       problem->y[i] = labels[i];
     }
-
-    node_vectors = new svm_node*[problem->l];
-
-    for (Size i = 0; i < vectors.size(); i++)
-    {
-      node_vectors[i] = vectors[i];
-    }
-    problem->x = node_vectors;
-
-// cout << "Problem encoded" << "\n";
 
     return problem;
   }
@@ -765,7 +757,7 @@ namespace OpenMS
   {
     if (problem != NULL)
     {
-      for (Int  i = 0; i < problem->l; i++)
+      for (Int i = 0; i < problem->l; i++)
       {
         delete[] problem->x[i];
       }

@@ -52,6 +52,7 @@ MapRTTransformer
 MapStatistics
 MascotAdapter
 MascotAdapterOnline
+MassDeviationScorer
 MassTraceExtractor
 MRMMapper
 MSGFPlusAdapter

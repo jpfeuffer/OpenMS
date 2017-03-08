@@ -59,7 +59,7 @@ namespace OpenMS
 
     SVMData();
 
-    SVMData(std::vector<std::vector<std::pair<Int, double> > >& seqs, std::vector<double>& lbls);
+    SVMData(std::vector<std::vector<std::pair<Int, double> > > seqs, std::vector<double> lbls);
 
     bool operator==(const SVMData& rhs) const;
 
@@ -298,20 +298,21 @@ public:
 
       This function creates 'number' equally sized random partitions and stores them in 'partitions'.
     */
-    static void createRandomPartitions(const SVMData& problem,
-                                       Size                                  number,
-                                       std::vector<SVMData>& problems);
-    /**
-      @brief You can merge partitions excluding the partition with index 'except'
-    */
-    static svm_problem* mergePartitions(const std::vector<svm_problem*>& problems, Size except);
+    static void createRandomPartitions(const SVMData &problem,
+                                       Size number,
+                                       std::vector<SVMData> &problems);
 
     /**
       @brief You can merge partitions excluding the partition with index 'except'
     */
-    static void mergePartitions(const std::vector<SVMData>& problems,
-                                Size                                            except,
-                                SVMData& merged_problem);
+    static svm_problem *mergePartitions(const std::vector<svm_problem *> &problems, Size except);
+
+    /**
+      @brief You can merge partitions excluding the partition with index 'except'
+    */
+    static void mergePartitions(const std::vector<SVMData> &problems,
+                                Size except,
+                                SVMData &merged_problem);
 
     /**
       @brief predicts the labels using the trained model
@@ -331,19 +332,19 @@ public:
       @brief Performs a CV for the data given by 'problem'
 
     */
-    double performCrossValidation(svm_problem* problem_ul,
-                                      const SVMData& problem_l,
-                                      const bool                                        is_labeled,
-                                      const   std::map<SVM_parameter_type, double>& start_values_map,
-                                      const   std::map<SVM_parameter_type, double>& step_sizes_map,
-                                      const   std::map<SVM_parameter_type, double>& end_values_map,
-                                      Size                                                                                number_of_partitions,
-                                      Size                                                                                  number_of_runs,
-                                      std::map<SVM_parameter_type, double>& best_parameters,
-                                      bool                                                                                            additive_step_sizes = true,
-                                      bool                                                                                        output = false,
-                                      String                                                                                      performances_file_name = "performances.txt",
-                                      bool                                                                                            mcc_as_performance_measure = false);
+    double performCrossValidation(svm_problem *problem_ul,
+                                  const SVMData &problem_l,
+                                  const bool is_labeled,
+                                  const std::map<SVM_parameter_type, double> &start_values_map,
+                                  const std::map<SVM_parameter_type, double> &step_sizes_map,
+                                  const std::map<SVM_parameter_type, double> &end_values_map,
+                                  Size number_of_partitions,
+                                  Size number_of_runs,
+                                  std::map<SVM_parameter_type, double> &best_parameters,
+                                  bool additive_step_sizes = true,
+                                  bool output = false,
+                                  String performances_file_name = "performances.txt",
+                                  bool mcc_as_performance_measure = false);
 
 
     /**
@@ -373,9 +374,9 @@ public:
       off by default (max_distance < 0).
     */
     static double kernelOligo(const std::vector<std::pair<int, double> >& x,
-                                  const std::vector<std::pair<int, double> >& y,
-                                  const std::vector<double>& gauss_table,
-                                  int                                                                     max_distance = -1);
+                              const std::vector<std::pair<int, double> > &y,
+                              const std::vector<double> &gauss_table,
+                              int max_distance = -1);
 
     /**
       @brief calculates the oligo kernel value for the encoded sequences 'x' and 'y'
@@ -384,7 +385,7 @@ public:
       the sequences 'x' and 'y' that had been encoded by the encodeOligoBorder... function
       of the LibSVMEncoder class.
     */
-    static double kernelOligo(const svm_node* x, const svm_node* y, const std::vector<double>& gauss_table, double sigma_square = 0, Size    max_distance = 50);
+    static double kernelOligo(const svm_node* x, const svm_node* y, const std::vector<double>& gauss_table, double sigma_square = 0, Size max_distance = 50);
 
     /**
       @brief calculates the significance borders of the error model and stores them in 'sigmas'
@@ -401,6 +402,14 @@ public:
                                 Size number_of_partitions = 5,
                                 double step_size = 0.01,
                                 Size max_iterations = 1000000);
+
+    /**
+        @brief calculates the fitted standard deviation of the predictions on training data for a given data point using the model parameters
+
+        Uses the model parameters to calculate the standard deviation for 'point' which has the data
+        entries: measured, predicted retention time.
+    */
+    double getStdDevAtPoint(double sigma1, double sigma2, std::pair<double, double> point);
 
     /**
       @brief calculates a p-value for a given data point using the model parameters
@@ -451,14 +460,13 @@ public:
 
     /**
       @brief This is used for being able to perform predictions with non libsvm standard kernels
-
     */
     void setTrainingSample(svm_problem* training_sample);
 
     /**
       @brief This is used for being able to perform predictions with non libsvm standard kernels
     */
-    void setTrainingSample(SVMData& training_sample);
+    void setTrainingSample(SVMData const & training_sample);
 
     /**
       @brief This function fills probabilities with the probability estimates for the first class.
@@ -510,10 +518,13 @@ private:
     std::vector<double> gauss_table_; // lookup table for fast computation of the oligo kernel
     std::vector<std::vector<double> > gauss_tables_; // lookup table for fast computation of the combined oligo kernel
     Size kernel_type_; // the actual kernel type
-    Size  border_length_; // the actual kernel type
+    Size border_length_; // the actual kernel type
     svm_problem* training_set_; // the training set
     svm_problem* training_problem_; // the training set
     SVMData training_data_; // the training set (different encoding)
+    void resetModel_();
+
+
   };
 
 } // namespace OpenMS

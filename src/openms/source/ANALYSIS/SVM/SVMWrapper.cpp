@@ -61,7 +61,7 @@ namespace OpenMS
   {
   }
 
-  SVMData::SVMData(std::vector<std::vector<std::pair<Int, double> > >& seqs, std::vector<double>& lbls) :
+  SVMData::SVMData(std::vector<std::vector<std::pair<Int, double> > > seqs, std::vector<double> lbls) :
     sequences(seqs),
     labels(lbls)
   {
@@ -152,39 +152,32 @@ namespace OpenMS
     model_(NULL),
     sigma_(0),
     sigmas_(vector<double>()),
-    gauss_table_(),
+    gauss_table_(vector<double>()),
     kernel_type_(PRECOMPUTED),
     border_length_(0),
     training_set_(NULL),
     training_problem_(NULL),
     training_data_(SVMData())
   {
-    param_ = (struct svm_parameter*) malloc(sizeof(struct svm_parameter));
+    param_ = (svm_parameter*) malloc(sizeof(svm_parameter));
     initParameters_();
   }
 
   SVMWrapper::~SVMWrapper()
   {
-    if (param_ != NULL)
-    {
-      svm_destroy_param(param_);
-      free(param_);
-      param_ = NULL;
-    }
-    if (model_ != NULL)
-    {
-#if OPENMS_LIBSVM_VERSION_MAJOR == 2
-      svm_destroy_model(model_);
-#else
-      svm_free_and_destroy_model(&model_);
-#endif
-      model_ = NULL;
-    }
+    svm_destroy_param(param_); //Destroys the weight and weight_label arrays
+    free(param_);
+    param_ = NULL;
+
+    resetModel_();
+
+    LibSVMEncoder::destroyProblem(training_set_);
+    LibSVMEncoder::destroyProblem(training_problem_);
   }
 
   void SVMWrapper::setParameter(SVM_parameter_type type, Int value)
   {
-
+    assert(param_ != NULL);
     switch (type)
     {
     case (SVM_TYPE):
@@ -249,6 +242,7 @@ namespace OpenMS
 
   Int SVMWrapper::getIntParameter(SVM_parameter_type type)
   {
+    assert(param_ != NULL);
     switch (type)
     {
     case (KERNEL_TYPE):
@@ -280,6 +274,7 @@ namespace OpenMS
 
   void SVMWrapper::setParameter(SVM_parameter_type type, double value)
   {
+    assert(param_ != NULL);
     switch (type)
     {
     case (DEGREE):
@@ -317,6 +312,7 @@ namespace OpenMS
 
   double SVMWrapper::getDoubleParameter(SVM_parameter_type type)
   {
+    assert(param_ != NULL);
     switch (type)
     {
     case (C):
@@ -341,12 +337,29 @@ namespace OpenMS
 
   void SVMWrapper::setTrainingSample(svm_problem* training_sample)
   {
+    if (training_set_ != NULL) {
+      LibSVMEncoder::destroyProblem(training_set_);
+      training_set_ = NULL;
+    }
     training_set_ = training_sample;
   }
 
-  void SVMWrapper::setTrainingSample(SVMData& training_sample)
+  void SVMWrapper::setTrainingSample(SVMData const & training_sample)
   {
     training_data_ = training_sample;
+  }
+
+  void SVMWrapper::resetModel_(){
+    if (model_ != NULL)
+    {
+      #if OPENMS_LIBSVM_VERSION_MAJOR == 2
+      svm_destroy_model(model_);
+      #else
+      svm_free_and_destroy_model(&model_);
+      #endif
+
+      model_ = NULL;
+    }
   }
 
   Int SVMWrapper::train(struct svm_problem* problem)
@@ -355,17 +368,8 @@ namespace OpenMS
        && param_ != NULL
        && (svm_check_parameter(problem, param_) == NULL))
     {
-      training_set_ = problem;
-
-      if (model_ != NULL)
-      {
-#if OPENMS_LIBSVM_VERSION_MAJOR == 2
-        svm_destroy_model(model_);
-#else
-        svm_free_and_destroy_model(&model_);
-#endif
-        model_ = NULL;
-      }
+      setTrainingSample(problem);
+      resetModel_();
 
       if (kernel_type_ == OLIGO)
       {
@@ -405,17 +409,8 @@ namespace OpenMS
   {
     if (param_ != NULL || kernel_type_ != OLIGO)
     {
-      training_data_ = problem;
-
-      if (model_ != NULL)
-      {
-#if OPENMS_LIBSVM_VERSION_MAJOR == 2
-        svm_destroy_model(model_);
-#else
-        svm_free_and_destroy_model(&model_);
-#endif
-        model_ = NULL;
-      }
+      setTrainingSample(problem);
+      resetModel_();
 
       if (border_length_ != gauss_table_.size())
       {
@@ -448,7 +443,7 @@ namespace OpenMS
 
   void SVMWrapper::saveModel(std::string model_filename) const
   {
-    Int  status = 0;
+    Int status = 0;
 
     if (model_ != NULL)
     {
@@ -470,15 +465,7 @@ namespace OpenMS
     TextFile::ConstIterator it;
     vector<String> parts;
 
-    if (model_ != NULL)
-    {
-#if OPENMS_LIBSVM_VERSION_MAJOR == 2
-      svm_destroy_model(model_);
-#else
-      svm_free_and_destroy_model(&model_);
-#endif
-      model_ = NULL;
-    }
+    resetModel_();
     model_ = svm_load_model(model_filename.c_str());
     setParameter(SVM_TYPE, svm_get_svm_type(model_));
     file.load(model_filename, true);
@@ -529,12 +516,9 @@ namespace OpenMS
 
     if (model_ != NULL && problem != NULL)
     {
-      if (kernel_type_ == OLIGO)
+      if (kernel_type_ == OLIGO && training_set_ != NULL)
       {
-        if (training_set_ != NULL)
-        {
           problem = computeKernelMatrix(problem, training_set_);
-        }
       }
       results.reserve(problem->l);
       for (Int i = 0; i < problem->l; i++)
@@ -542,8 +526,7 @@ namespace OpenMS
         double label = svm_predict(model_, problem->x[i]);
         results.push_back(label);
       }
-
-      if (kernel_type_ == OLIGO)
+      if (kernel_type_ == OLIGO && training_set_ != NULL)
       {
         LibSVMEncoder::destroyProblem(problem);
       }
@@ -583,7 +566,7 @@ namespace OpenMS
   }
 
   void SVMWrapper::createRandomPartitions(svm_problem* problem,
-                                          Size                                number,
+                                          Size number,
                                           vector<svm_problem*>& problems)
   {
     vector<Size> indices;
@@ -816,23 +799,19 @@ namespace OpenMS
     }
   }
 
-  /**
-        NEW method:
-
-  */
   double SVMWrapper::performCrossValidation(svm_problem* problem_ul,
-                                            const SVMData& problem_l,
-                                            const bool                                   is_labeled,
-                                            const   map<SVM_parameter_type, double>& start_values_map,
-                                            const   map<SVM_parameter_type, double>& step_sizes_map,
-                                            const   map<SVM_parameter_type, double>& end_values_map,
-                                            Size                                                                             number_of_partitions,
-                                            Size                                                                             number_of_runs,
-                                            map<SVM_parameter_type, double>& best_parameters,
-                                            bool                                                                                 additive_step_sizes,
-                                            bool                                                                             output,
-                                            String                                                                           performances_file_name,
-                                            bool                                                                                 mcc_as_performance_measure)
+                                            const SVMData &problem_l,
+                                            const bool is_labeled,
+                                            const map<SVM_parameter_type, double> &start_values_map,
+                                            const map<SVM_parameter_type, double> &step_sizes_map,
+                                            const map<SVM_parameter_type, double> &end_values_map,
+                                            Size number_of_partitions,
+                                            Size number_of_runs,
+                                            map<SVM_parameter_type, double> &best_parameters,
+                                            bool additive_step_sizes,
+                                            bool output,
+                                            String performances_file_name,
+                                            bool mcc_as_performance_measure)
   {
     map<SVM_parameter_type, double>::const_iterator start_values_iterator;
     vector<pair<double, Size> > combined_parameters;
@@ -1002,6 +981,7 @@ namespace OpenMS
                 Math::pearsonCorrelationCoefficient(predicted_labels.begin(), predicted_labels.end(), it_start, it_end);
             }
 
+            //Why???
             if (param_->kernel_type == PRECOMPUTED)
             {
               LibSVMEncoder::destroyProblem(training_problem_);
@@ -1087,9 +1067,7 @@ namespace OpenMS
       {
         for (Size k = 0; k < number_of_partitions; k++)
         {
-          delete[] training_data_ul[k]->x;
-          delete[] training_data_ul[k]->y;
-          delete training_data_ul[k]; // delete individual objects
+          LibSVMEncoder::destroyProblem(training_data_ul[k]);
         }
         delete[] training_data_ul; // delete array of pointers
       }
@@ -1340,12 +1318,9 @@ namespace OpenMS
 
     if (model_ != NULL)
     {
-      if (kernel_type_ == OLIGO)
+      if (kernel_type_ == OLIGO && training_set_ != NULL)
       {
-        if (training_set_ != NULL)
-        {
           problem = computeKernelMatrix(problem, training_set_);
-        }
       }
       for (int i = 0; i < problem->l; ++i)
       {
@@ -1360,7 +1335,7 @@ namespace OpenMS
           probabilities.push_back(1 - temp_prob_estimates[0]);
         }
       }
-      if (kernel_type_ == OLIGO)
+      if (kernel_type_ == OLIGO && training_set_ != NULL)
       {
         LibSVMEncoder::destroyProblem(problem);
       }
@@ -1369,7 +1344,7 @@ namespace OpenMS
 
   void SVMWrapper::initParameters_()
   {
-    model_ = NULL;
+    //model_ = NULL;
 
     param_->svm_type = NU_SVR;
     param_->kernel_type = PRECOMPUTED;
@@ -1402,8 +1377,9 @@ namespace OpenMS
     if (weight_labels.size() == weights.size() && weights.size() > 0)
     {
       param_->nr_weight = (Int)weights.size();
-      param_->weight_label = new Int[weights.size()];
-      param_->weight = new double[weights.size()];
+      // The next members are freed via svm_free_param which uses C style free()!
+      param_->weight_label = (Int*) malloc(sizeof(Int) * weights.size());
+      param_->weight = (double*) malloc(sizeof(double) * weights.size());
       for (Size i = 0; i < weights.size(); ++i)
       {
         param_->weight_label[i] = weight_labels[i];
@@ -1415,7 +1391,7 @@ namespace OpenMS
   double SVMWrapper::kernelOligo(const vector<pair<int, double> >& x,
                                  const vector<pair<int, double> >& y,
                                  const vector<double>& gauss_table,
-                                 int                                                                 max_distance)
+                                 int max_distance)
   {
     double kernel = 0;
     Size i1     = 0;
@@ -1595,15 +1571,15 @@ namespace OpenMS
 
   svm_problem* SVMWrapper::computeKernelMatrix(svm_problem* problem1, svm_problem* problem2)
   {
-    double temp = 0;
-    svm_problem* kernel_matrix;
 
     if (problem1 == NULL || problem2 == NULL)
     {
       return NULL;
     }
+
+    double temp = 0;
+    svm_problem* kernel_matrix(new svm_problem());
     UInt number_of_sequences = problem1->l;
-    kernel_matrix = new svm_problem;
     kernel_matrix->l = number_of_sequences;
     kernel_matrix->x = new svm_node*[number_of_sequences];
     kernel_matrix->y = new double[number_of_sequences];
@@ -1649,9 +1625,6 @@ namespace OpenMS
 
   svm_problem* SVMWrapper::computeKernelMatrix(const SVMData& problem1, const SVMData& problem2)
   {
-    double temp = 0;
-    svm_problem* kernel_matrix;
-
     if (problem1.labels.empty() || problem2.labels.empty())
     {
       return NULL;
@@ -1663,15 +1636,19 @@ namespace OpenMS
       return NULL;
     }
 
+    double temp = 0;
     Size number_of_sequences = problem1.labels.size();
-    kernel_matrix = new svm_problem;
+    svm_problem* kernel_matrix (new svm_problem());
     kernel_matrix->l = (int) number_of_sequences;
     kernel_matrix->x = new svm_node*[number_of_sequences];
+    assert(kernel_matrix->x != NULL);
     kernel_matrix->y = new double[number_of_sequences];
+    assert(kernel_matrix->y != NULL);
 
     for (Size i = 0; i < number_of_sequences; i++)
     {
       kernel_matrix->x[i] = new svm_node[problem2.labels.size() + 2];
+      assert(kernel_matrix->x[i] != NULL);
       kernel_matrix->x[i][0].index = 0;
       kernel_matrix->x[i][0].value = i + 1;
       kernel_matrix->y[i] = problem1.labels[i];
@@ -1717,21 +1694,21 @@ namespace OpenMS
                                           Size max_iterations)
   {
     vector<pair<double, double> > points;
-    vector<double>                                      differences;
-    vector<svm_problem*>                                partitions;
-    svm_problem* training_data;
-    vector<double>                                      predicted_labels;
-    vector<double>                                      real_labels;
-    Size                                                                    counter = 0;
-    Size                                                                    target = 0;
-    ofstream                                                            file("points.txt");
-    double                                                      mean;
-    double                                                      intercept = 0;
-    double                                                      slope = 0;
-    double                                                      step_size1 = 0.;
-    double                                                      step_size2 = step_size;
-    double                                                      maximum = 0.;
-    double                                                      minimum = 0.;
+    vector<double> differences;
+    vector<svm_problem *> partitions;
+    svm_problem *training_data;
+    vector<double> predicted_labels;
+    vector<double> real_labels;
+    Size counter = 0;
+    Size target = 0;
+    ofstream file("points.txt");
+    double mean;
+    double intercept = 0;
+    double slope = 0;
+    double step_size1 = 0.;
+    double step_size2 = step_size;
+    double maximum = 0.;
+    double minimum = 0.;
 
 
     // creation of points (measured rt, predicted rt)
@@ -1759,6 +1736,8 @@ namespace OpenMS
           }
         }
       }
+      // I think ee can destroy the training data from the last iteration
+      //LibSVMEncoder::destroyProblem(training_problem_);
     }
     file << flush;
 
@@ -1798,21 +1777,20 @@ namespace OpenMS
                                           Size max_iterations)
   {
     vector<pair<double, double> > points;
-    vector<double>                                      differences;
-    vector<SVMData>                                         partitions;
-    SVMData                                                             training_data;
-    vector<double>                                      predicted_labels;
-    Size                                                                    counter = 0;
-    Size                                                                    target = 0;
-    ofstream                                                            file("points.txt");
-    double                                                      mean;
-    double                                                      intercept = 0;
-    double                                                      slope = 0;
-    double                                                      step_size1 = 0.;
-    double                                                      step_size2 = step_size;
-    double                                                      maximum = 0.;
-    double                                                      minimum = 0.;
-
+    vector<double> differences;
+    vector<SVMData> partitions;
+    SVMData training_data;
+    vector<double> predicted_labels;
+    Size counter = 0;
+    Size target = 0;
+    ofstream file("points.txt");
+    double mean;
+    double intercept = 0;
+    double slope = 0;
+    double step_size1 = 0.;
+    double step_size2 = step_size;
+    double maximum = 0.;
+    double minimum = 0.;
 
 
     // creation of points (measured rt, predicted rt)
@@ -1900,6 +1878,15 @@ namespace OpenMS
     return counter;
   }
 
+  double SVMWrapper::getStdDevAtPoint(double intercept,
+                                      double slope,
+                                      pair<double, double> point)
+  {
+
+    double sigma =  ((intercept + point.first * slope) - point.first) / 2;
+    return (sigma < 0) ? (-1 * sigma) : sigma;
+  }
+
   double SVMWrapper::getPValue(double intercept,
                                double slope,
                                pair<double, double> point)
@@ -1907,9 +1894,8 @@ namespace OpenMS
     double center = point.first;
     double distance = std::abs(point.second - center);
 
-    double actual_sigma = ((intercept + point.first * slope) - point.first) / 2;
+    double actual_sigma = getStdDevAtPoint(intercept, slope, point);
 
-    actual_sigma = (actual_sigma < 0) ? (-1 * actual_sigma) : actual_sigma;
     double sd_units = distance / actual_sigma;
 
     // getting only the inner part of the area [-1,1]
@@ -1940,12 +1926,9 @@ namespace OpenMS
           first_label_positive = true;
         }
 
-        if (kernel_type_ == OLIGO)
+        if (kernel_type_ == OLIGO && training_set_ != NULL)
         {
-          if (training_set_ != NULL)
-          {
             data = computeKernelMatrix(data, training_set_);
-          }
         }
         for (Int  i = 0; i < data->l; ++i)
         {
@@ -1960,7 +1943,7 @@ namespace OpenMS
             decision_values.push_back(-temp_value);
           }
         }
-        if (kernel_type_ == OLIGO)
+        if (kernel_type_ == OLIGO && training_set_ != NULL)
         {
           LibSVMEncoder::destroyProblem(data);
         }

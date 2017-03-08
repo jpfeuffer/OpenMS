@@ -182,6 +182,7 @@ namespace OpenMS
 
   Size InternalCalibration::fillCalibrants( const FeatureMap& fm, double tol_ppm )
   {
+    LOG_INFO << "Searching features for potential calibrants..." << std::endl;
     cal_data_.clear();
     for (FeatureMap::ConstIterator it = fm.begin(); it != fm.end(); ++it)
     {
@@ -199,11 +200,10 @@ namespace OpenMS
       if (tol_ppm < Math::getPPMAbs(it->getMZ(), mz_ref)) continue;
       cal_data_.insertCalibrationPoint(it->getRT(), it->getMZ(), it->getIntensity(), mz_ref, log(it->getIntensity()));
     }
-
+    LOG_INFO << "Found " << cal_data_.size() << " calibrants in identified features." << std::endl;
     // unassigned peptide IDs
+    LOG_INFO << "Searching for calibrants in unassigned peptide identifications..." << std::endl;
     fillIDs_(fm.getUnassignedPeptideIdentifications(), tol_ppm);
-
-    LOG_INFO << "Found " << cal_data_.size() << " calibrants (incl. unassigned) in FeatureMap." << std::endl;
 
     // sort CalData by RT
     cal_data_.sortByRT();
@@ -215,6 +215,7 @@ namespace OpenMS
   {
     Size cnt_nomz(0);
     Size cnt_nort(0);
+    Size cnt_cals_before = cal_data_.size();
 
     for (std::vector<PeptideIdentification>::const_iterator it = pep_ids.begin(); it != pep_ids.end(); ++it)
     {
@@ -243,7 +244,7 @@ namespace OpenMS
       const double intensity = 1.0;
       cal_data_.insertCalibrationPoint(it->getRT(), it->getMZ(), intensity, mz_ref, weight);
     }
-    LOG_INFO << "Found " << cal_data_.size() << " calibrants in peptide IDs." << std::endl;
+    LOG_INFO << "Found " << cal_data_.size() - cnt_cals_before << " calibrants in peptide IDs." << std::endl;
     if (cnt_nomz > 0) LOG_WARN << "Warning: " << cnt_nomz << "/" << pep_ids.size() << " were skipped, since they have no m/z value set! They cannot be used as calibration point." << std::endl;
     if (cnt_nort > 0) LOG_WARN << "Warning: " << cnt_nort << "/" << pep_ids.size() << " were skipped, since they have no RT value set! They cannot be used as calibration point." << std::endl;
   }

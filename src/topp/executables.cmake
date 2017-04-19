@@ -78,6 +78,7 @@ PrecursorMassCorrector
 ProteinInference
 ProteinQuantifier
 ProteinResolver
+PSMPrescorer
 PTModel
 PTPredict
 RTModel

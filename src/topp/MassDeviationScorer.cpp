@@ -60,7 +60,7 @@ using namespace std;
   </tr>
   <tr>
    <td VALIGN="middle" ALIGN = "center" ROWSPAN=1> @ref TOPP_MapRTTransformer (with trafoXML from InternalCalibration) </td>
-   <td VALIGN="middle" ALIGN = "center" ROWSPAN=1> @ref TOPP_PeptideRescorer (or TOPPPerc) </td>
+   <td VALIGN="middle" ALIGN = "center" ROWSPAN=1> @ref TOPP_PSMPrescorer (or TOPPPerc) </td>
   </tr>
  </table>
 </CENTER>
@@ -98,6 +98,7 @@ protected:
     registerOutputFile_("out", "<file>", "", "output file ");
     setValidFormats_("out", ListUtils::create<String>("idXML"));
     registerFlag_("use_all_psms", "If enabled, uses not only the best matching PSM per spectra but all.");
+    registerFlag_("ignore_isotope_errors", "If enabled, probability calculation is only performed on distributions of monoisotopic matches.");
     registerFlag_("combine_isotope_errors", "If enabled, the tool does not use different distributions for"
         " deviations of PSMs per isotope error (if enabled in the search).");
   }

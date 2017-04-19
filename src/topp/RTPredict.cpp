@@ -782,6 +782,7 @@ protected:
             double temp_bootstrap_prob_correct = 0.;
             double temp_likelihood_correct = 0.;
             double temp_likelihood_false = 0.;
+            double temp_bootstrap_prob_correct_alt = 0.;
 
             if (svm.getIntParameter(SVMWrapper::KERNEL_TYPE) == SVMWrapper::OLIGO) {
               temp_rt = predicted_modified_data[temp_peptide_hits[j].getSequence()];
@@ -811,10 +812,16 @@ protected:
                 temp_bootstrap_mean = t1[i+j] / t0;
                 temp_bootstrap_stddev = (1.0/t0) * std::sqrt((t0 * t2[i+j]) - (t1[i+j] * t1[i+j]));
                 // TODO remove?
-                //boost::math::normal_distribution<double> error_dist = boost::math::normal_distribution<double>(
-                //    t1[i] / t0, // mean
-                //    (1.0/t0) * std::sqrt((t0 * t2[i]) - (t1[i] * t1[i])));  //standard deviation
-                //temp_bootstrap_prob_correct = boost::math::pdf(error_dist,temp_point.first);
+                boost::math::normal_distribution<double> correct_dist = boost::math::normal_distribution<double>(
+                  temp_bootstrap_mean,
+                  450.0//temp_bootstrap_stddev. Hack: did EM in R
+                );
+                boost::math::normal_distribution<double> incorrect_dist = boost::math::normal_distribution<double>(
+                    temp_bootstrap_mean,
+                    2500.0//temp_bootstrap_stddev. Hack: did EM in R
+                );
+                temp_bootstrap_prob_correct_alt = boost::math::pdf(correct_dist,temp_point.first) /
+                    (boost::math::pdf(correct_dist,temp_point.first) + boost::math::pdf(incorrect_dist,temp_point.first));
 
                 // unnormalized expectation of likelihood coming from the correct distribution (from training data)
                 temp_likelihood_correct = integrateGaussianPDFProduct_(temp_training_mean,
@@ -857,9 +864,9 @@ protected:
                 temp_peptide_hits[j].setMetaValue("predicted_RT_bootstrap_mean", temp_bootstrap_mean);
                 temp_peptide_hits[j].setMetaValue("predicted_RT_bootstrap_std_dev", temp_bootstrap_stddev);
                 temp_peptide_hits[j].setMetaValue("predicted_RT_training_std_dev", temp_training_stddev);
+                temp_peptide_hits[j].setMetaValue("predicted_RT_prob_correct_alt", temp_bootstrap_prob_correct_alt);
               }
               temp_peptide_hits[j].setMetaValue("predicted_RT", temp_rt);
-              // TODO maybe return the mean of the bootstrap predictions. Should be similar.
             }
           }
           identifications[i].setHits(temp_peptide_hits);

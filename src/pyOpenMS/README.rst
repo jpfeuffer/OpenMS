@@ -90,8 +90,7 @@ pyOpenMS is published under the 3-clause BSD licence, see ./pyOpenMS/License.txt
 Documentation
 -------------
 
-pyOpenMS follows the `OpenMS
-documentation <http://ftp.mi.fu-berlin.de/pub/OpenMS/release-documentation/html/classes.html>`_ very closely. Additionally, there is also a `pyOpenMS
+pyOpenMS follows `the OpenMS documentation`_ very closely. Additionally, there is also a `pyOpenMS
 Manual <http://proteomics.ethz.ch/pyOpenMS_Manual.pdf>`_ available. The online
 manual contains a complete record of every wrapped class and function while the
 documentation of the corresponding class or function can be inferred from the
@@ -99,7 +98,7 @@ OpenMS online documentation.
 
 
 
-.. _the OpenMS documentation: http://ftp.mi.fu-berlin.de/pub/OpenMS/release-documentation/html/classes.html
+.. _the OpenMS documentation: https://abibuilder.informatik.uni-tuebingen.de/archive/openms/Documentation/release/latest/html/classes.html
 .. _Christoph Gohlkes webpage: http://www.lfd.uci.edu/~gohlke/pythonlibs/#numpy
 .. _setuptools PyPI page: https://pypi.python.org/pypi/setuptools
 

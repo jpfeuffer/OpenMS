@@ -34,6 +34,8 @@
 
 #include <OpenMS/APPLICATIONS/TOPPBase.h>
 
+#include <OpenMS/CONCEPT/VersionInfo.h>
+
 #include <OpenMS/SYSTEM/File.h>
 #include <OpenMS/SYSTEM/StopWatch.h>
 #include <OpenMS/SYSTEM/SysInfo.h>
@@ -2288,12 +2290,12 @@ namespace OpenMS
       QString docurl = "", category = "";
       if (official_) // we can only get the docurl/category from registered/official tools
       {
-        docurl = "http://ftp.mi.fu-berlin.de/OpenMS/release-documentation/html/TOPP_" + tool_name_.toQString() + ".html";
+        docurl = "https://abibuilder.informatik.uni-tuebingen.de/archive/openms/Documentation/release/"+ VersionInfo::getVersion() +"/html/TOPP_" + tool_name_.toQString() + ".html";
         category = ToolHandler::getCategory(tool_name_).toQString();
       }
       else if (ToolHandler::getUtilList().count(tool_name_))
       {
-        docurl = "http://ftp.mi.fu-berlin.de/OpenMS/release-documentation/html/UTILS_" + tool_name_.toQString() + ".html";
+        docurl = "https://abibuilder.informatik.uni-tuebingen.de/archive/openms/Documentation/release/"+ VersionInfo::getVersion() +"/html/UTILS_" + tool_name_.toQString() + ".html";
         category = ToolHandler::getCategory(tool_name_).toQString();
       }
 

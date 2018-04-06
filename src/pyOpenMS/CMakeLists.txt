@@ -323,6 +323,7 @@ set(_pyopenms_files
   run_nose.py
   run_memleaks.py
   doCythonCompileOnly.py
+  pyopenms_copy_deps.cmake
   fix_pyopenms_dependencies_on_mac.sh
 )
 
@@ -438,17 +439,27 @@ configure_file(${_env_py_in} ${_env_py} @ONLY)
 #------------------------------------------------------------------------------
 # create targets in makefile
 
-IF(${CMAKE_SYSTEM_NAME} MATCHES "Linux" AND PY_NO_OUTPUT)
+#set(INTERNAL_DEPENDENCIES $<TARGET_FILE:OpenMS>)
+#message("For which libs to find dependencies:" ${INTERNAL_DEPENDENCIES})  -DTARGET="${CMAKE_BINARY_DIR}/pyOpenMS"
+message("QT5 at: ${Qt5_DIR}")
+add_custom_target(pyopenms_copy_deps
+					COMMAND ${CMAKE_COMMAND} -DDEPS="$<TARGET_FILE:OpenMS>"  -DTARGET="${CMAKE_BINARY_DIR}/pyOpenMS/" -DLOOKUP_DIRS="${OPENMS_CONTRIB_LIBS}/lib\;${Qt5_DIR}/../../../bin" -P ${PROJECT_SOURCE_DIR}/pyopenms_copy_deps.cmake
+					DEPENDS OpenMS SuperHirn
+					)
+					
+IF(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
   add_custom_target(pyopenms_create_cpp
     COMMAND ${PYTHON_EXECUTABLE} create_cpp_extension.py 2> /dev/null
-    DEPENDS OpenMS SuperHirn
+    DEPENDS pyopenms_copy_deps
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/pyOpenMS )
 ELSE()
   add_custom_target(pyopenms_create_cpp
     COMMAND ${PYTHON_EXECUTABLE} create_cpp_extension.py
-    DEPENDS OpenMS SuperHirn
+    DEPENDS pyopenms_copy_deps
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/pyOpenMS )
 ENDIF()
+
+
 
 
 set(PY_EXTRA_ARGS "")

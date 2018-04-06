@@ -107,7 +107,7 @@ endif()
 if (TBB_FOUND)
  list(APPEND OPENMS_DEP_LIBRARIES ${TBB_LIBRARIES})
 endif()
-if (MSVC) ## TODO check if necessary, does it need to go to OpenMS_GUI?
+if (MSVC AND NOT OPENMS_64BIT_ARCHITECTURE) ## TODO check if necessary, does it need to go to OpenMS_GUI?
 	list(APPEND OPENMS_DEP_LIBRARIES opengl32.lib)
 endif()
 if (WITH_CRAWDAD) ## TODO check if still necessary
@@ -146,11 +146,11 @@ openms_add_library(TARGET_NAME  OpenMS
                                  ${OpenMS_configured_headers}
                    INTERNAL_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/include
                                      ${CMAKE_CURRENT_BINARY_DIR}/include
-		   PRIVATE_INCLUDES ${EOL_BSPLINE_INCLUDE_DIRECTORY}
+				   PRIVATE_INCLUDES  ${EOL_BSPLINE_INCLUDE_DIRECTORY}
                    EXTERNAL_INCLUDES ${OPENMS_CONTRIB_INCLUDE_DIRS}
-		                     ${OpenSwathAlgo_INCLUDE_DIRECTORIES}
-				     ${INCLUDES_FROM_CONTRIB}
-				     ${INCLUDES_FROM_SYSTEM}
+									 ${OpenSwathAlgo_INCLUDE_DIRECTORIES}
+									 ${INCLUDES_FROM_CONTRIB}
+									 ${INCLUDES_FROM_SYSTEM}
                                      ${Qt5Core_INCLUDE_DIRS}
                                      ${Qt5Network_INCLUDE_DIRS}
                    LINK_LIBRARIES OpenSwathAlgo

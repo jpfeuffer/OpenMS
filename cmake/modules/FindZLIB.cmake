@@ -99,8 +99,9 @@ set(_ZLIB_SEARCH_NORMAL
   )
 list(APPEND _ZLIB_SEARCHES _ZLIB_SEARCH_NORMAL)
 
-set(_ZLIB_NAMES_RELEASE zlibstatic z zlib zdll zlib1)
-set(_ZLIB_NAMES_DEBUG zlibstaticd zlibd zlibd1)
+# Only use static zlib if dynamic is not found. pyOpenMS on Win does not work with it.
+set(_ZLIB_NAMES_RELEASE  z zlib zdll zlib1 zlibstatic)
+set(_ZLIB_NAMES_DEBUG  zlibd zlibd1 zlibstaticd)
 
 # handle debug and release
 include(${CMAKE_CURRENT_LIST_DIR}/SelectLibraryConfigurations.cmake)

@@ -2,7 +2,7 @@
 //                   OpenMS -- Open-Source Mass Spectrometry
 // --------------------------------------------------------------------------
 // Copyright The OpenMS Team -- Eberhard Karls University Tuebingen,
-// ETH Zurich, and Freie Universitaet Berlin 2002-2016.
+// ETH Zurich, and Freie Universitaet Berlin 2002-2017.
 //
 // This software is released under a three-clause BSD license:
 //  * Redistributions of source code must retain the above copyright
@@ -44,8 +44,8 @@ using namespace std;
 
 START_TEST(IBSpectraFile, "$Id$")
 
-IBSpectraFile* ptr = 0;
-IBSpectraFile* nullPointer = 0;
+IBSpectraFile* ptr = nullptr;
+IBSpectraFile* nullPointer = nullptr;
 
 START_SECTION((IBSpectraFile()))
 {
@@ -73,7 +73,7 @@ START_SECTION((void store(const String& filename, const ConsensusMap& cm)))
 {
   // test invalid ConsensusMap
   ConsensusMap cm_no_ms2quant;
-  cm_no_ms2quant.setExperimentType("not-isobaric");
+  cm_no_ms2quant.setExperimentType("labeled_MS1");
 
   IBSpectraFile ibfile_no_ms2quant;
   TEST_EXCEPTION_WITH_MESSAGE(Exception::InvalidParameter, ibfile_no_ms2quant.store("not-a-file-name", cm_no_ms2quant), "Given ConsensusMap does not hold any isobaric quantification data.")

@@ -2,7 +2,7 @@
 //                   OpenMS -- Open-Source Mass Spectrometry
 // --------------------------------------------------------------------------
 // Copyright The OpenMS Team -- Eberhard Karls University Tuebingen,
-// ETH Zurich, and Freie Universitaet Berlin 2002-2016.
+// ETH Zurich, and Freie Universitaet Berlin 2002-2017.
 //
 // This software is released under a three-clause BSD license:
 //  * Redistributions of source code must retain the above copyright
@@ -37,7 +37,6 @@
 #include <OpenMS/METADATA/ProteinIdentification.h>
 #include <OpenMS/METADATA/PeptideIdentification.h>
 #include <OpenMS/FORMAT/FeatureXMLFile.h>
-#include <OpenMS/MATH/MISC/MathFunctions.h>
 
 using namespace std;
 
@@ -45,22 +44,57 @@ namespace OpenMS
 {
 
   FeatureGroupingAlgorithmKD::FeatureGroupingAlgorithmKD() :
-    ProgressLogger()
+    ProgressLogger(),
+    feature_distance_(FeatureDistance())
   {
     setName("FeatureGroupingAlgorithmKD");
-    defaults_.setValue("rt_tol", 60.0, "width of RT tolerance window (sec)");
-    defaults_.setValue("mz_tol", 15.0, "m/z tolerance (in ppm or Da)");
-    defaults_.setValue("mz_unit", "ppm", "unit of m/z tolerance");
+
+    defaults_.setValue("warp:enabled", "true", "Whether or not to internally warp feature RTs using LOWESS transformation before linking (reported RTs in results will always be the original RTs)");
+    defaults_.setValidStrings("warp:enabled", ListUtils::create<String>("true,false"));
+    defaults_.setValue("warp:rt_tol", 100.0, "Width of RT tolerance window (sec)");
+    defaults_.setMinFloat("warp:rt_tol", 0.0);
+    defaults_.setValue("warp:mz_tol", 5.0, "m/z tolerance (in ppm or Da)");
+    defaults_.setMinFloat("warp:mz_tol", 0.0);
+    defaults_.setValue("warp:max_pairwise_log_fc", 0.5, "Maximum absolute log10 fold change between two compatible signals during compatibility graph construction. Two signals from different maps will not be connected by an edge in the compatibility graph if absolute log fold change exceeds this limit (they might still end up in the same connected component, however). Note: this does not limit fold changes in the linking stage, only during RT alignment, where we try to find high-quality alignment anchor points. Setting this to a value < 0 disables the FC check.", ListUtils::create<String>("advanced"));
+    defaults_.setValue("warp:min_rel_cc_size", 0.5, "Only connected components containing compatible features from at least max(2, (warp_min_occur * number_of_input_maps)) input maps are considered for computing the warping function", ListUtils::create<String>("advanced"));
+    defaults_.setMinFloat("warp:min_rel_cc_size", 0.0);
+    defaults_.setMaxFloat("warp:min_rel_cc_size", 1.0);
+    defaults_.setValue("warp:max_nr_conflicts", 0, "Allow up to this many conflicts (features from the same map) per connected component to be used for alignment (-1 means allow any number of conflicts)", ListUtils::create<String>("advanced"));
+    defaults_.setMinInt("warp:max_nr_conflicts", -1);
+
+    defaults_.setValue("link:rt_tol", 30.0, "Width of RT tolerance window (sec)");
+    defaults_.setMinFloat("link:rt_tol", 0.0);
+    defaults_.setValue("link:mz_tol", 10.0, "m/z tolerance (in ppm or Da)");
+    defaults_.setMinFloat("link:mz_tol", 0.0);
+
+    defaults_.setValue("mz_unit", "ppm", "Unit of m/z tolerance");
     defaults_.setValidStrings("mz_unit", ListUtils::create<String>("ppm,Da"));
-    defaults_.setValue("warp", "true", "whether or not to internally warp feature RTs using LOWESS transformation before linking (reported RTs in results will always be the original RTs)");
-    defaults_.setValidStrings("warp", ListUtils::create<String>("true,false"));
-    defaults_.setValue("min_rel_cc_size", 0.5, "only relevant during RT transformation: only connected components containing at least (warp_min_occur * number_of_input_maps) features are considered for computing the warping function");
-    defaults_.setMinFloat("min_rel_cc_size", 0.0);
-    defaults_.setMaxFloat("min_rel_cc_size", 1.0);
-    defaults_.setValue("max_nr_conflicts", 0, "only relevant during RT transformation: allow up to this many conflicts (features from the same map) per connected component to be used for alignment (-1 means allow any number of conflicts)");
-    defaults_.setMinInt("max_nr_conflicts", -1);
-    defaults_.setValue("nr_partitions", 100, "number of partitions in m/z space");
+    defaults_.setValue("nr_partitions", 100, "Number of partitions in m/z space");
     defaults_.setMinInt("nr_partitions", 1);
+
+    // FeatureDistance defaults
+    defaults_.insert("", feature_distance_.getDefaults());
+
+    // override some of them
+    defaults_.setValue("distance_intensity:weight", 1.0);
+    defaults_.setValue("distance_intensity:log_transform", "enabled");
+    defaults_.addTag("distance_intensity:weight", "advanced");
+    defaults_.addTag("distance_intensity:log_transform", "advanced");
+    defaults_.remove("distance_RT:max_difference");
+    defaults_.remove("distance_MZ:max_difference");
+    defaults_.remove("distance_MZ:unit");
+    defaults_.remove("ignore_charge");
+
+    // LOWESS defaults
+    Param lowess_defaults;
+    TransformationModelLowess::getDefaultParameters(lowess_defaults);
+    for (Param::ParamIterator it = lowess_defaults.begin(); it != lowess_defaults.end(); ++it)
+    {
+      const_cast<Param::ParamEntry&>(*it).tags.insert("advanced");
+    }
+    defaults_.insert("LOWESS:", lowess_defaults);
+    defaults_.setSectionDescription("LOWESS", "LOWESS parameters for internal RT transformations (only relevant if 'warp:enabled' is set to 'true')");
+
     defaultsToParam_();
     setLogType(CMD);
   }
@@ -73,20 +107,24 @@ namespace OpenMS
   void FeatureGroupingAlgorithmKD::group_(const vector<MapType>& input_maps,
                                           ConsensusMap& out)
   {
-    rt_tol_secs_ = (double)(param_.getValue("rt_tol"));
-    mz_tol_ = (double)(param_.getValue("mz_tol"));
-    mz_ppm_ = param_.getValue("mz_unit").toString() == "ppm";
+    // set parameters
+    String mz_unit(param_.getValue("mz_unit").toString());
+    mz_ppm_ = mz_unit == "ppm";
+    mz_tol_ = (double)(param_.getValue("link:mz_tol"));
+    rt_tol_secs_ = (double)(param_.getValue("link:rt_tol"));
 
     // check that the number of maps is ok:
     if (input_maps.size() < 2)
     {
-      throw Exception::IllegalArgument(__FILE__, __LINE__, __PRETTY_FUNCTION__,
+      throw Exception::IllegalArgument(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION,
                                        "At least two maps must be given!");
     }
 
     out.clear(false);
 
+    // collect all m/z values for partitioning, find intensity maximum
     vector<double> massrange;
+    double max_intensity(0.0);
     for (typename vector<MapType>::const_iterator map_it = input_maps.begin();
          map_it != input_maps.end(); ++map_it)
     {
@@ -94,14 +132,33 @@ namespace OpenMS
           feat_it != map_it->end(); feat_it++)
       {
         massrange.push_back(feat_it->getMZ());
+        double inty = feat_it->getIntensity();
+        if (inty > max_intensity)
+        {
+          max_intensity = inty;
+        }
       }
     }
-    sort(massrange.begin(), massrange.end());
+
+    // set up distance functor
+    Param distance_params;
+    distance_params.insert("", param_.copy("distance_RT:"));
+    distance_params.insert("", param_.copy("distance_MZ:"));
+    distance_params.insert("", param_.copy("distance_intensity:"));
+    distance_params.setValue("distance_RT:max_difference", rt_tol_secs_);
+    distance_params.setValue("distance_MZ:max_difference", mz_tol_);
+    distance_params.setValue("distance_MZ:unit", (mz_ppm_ ? "ppm" : "Da"));
+    feature_distance_ = FeatureDistance(max_intensity, false);
+    feature_distance_.setParameters(distance_params);
 
     // partition at boundaries -> this should be safe because there cannot be
     // any cluster reaching across boundaries
 
+    sort(massrange.begin(), massrange.end());
     int pts_per_partition = massrange.size() / (int)(param_.getValue("nr_partitions"));
+
+    double warp_mz_tol = (double)(param_.getValue("warp:mz_tol"));
+    double max_mz_tol = max(mz_tol_, warp_mz_tol);
 
     // compute partition boundaries
     vector<double> partition_boundaries;
@@ -109,7 +166,7 @@ namespace OpenMS
     for (size_t j = 0; j < massrange.size()-1; j++)
     {
       // minimal differences between two m/z values
-      double massrange_diff = mz_ppm_ ? mz_tol_ * 1e-6 * massrange[j+1] : mz_tol_;
+      double massrange_diff = mz_ppm_ ? max_mz_tol * 1e-6 * massrange[j+1] : max_mz_tol;
 
       if (fabs(massrange[j] - massrange[j+1]) > massrange_diff)
       {
@@ -125,7 +182,7 @@ namespace OpenMS
     // ------------ compute RT transformation models ------------
 
     MapAlignmentAlgorithmKD aligner(input_maps.size(), param_);
-    bool align = param_.getValue("warp").toString() == "true";
+    bool align = param_.getValue("warp:enabled").toString() == "true";
     if (align)
     {
       Size progress = 0;
@@ -293,7 +350,7 @@ namespace OpenMS
       for (vector<Size>::const_iterator f_it = cf_indices.begin(); f_it != cf_indices.end(); ++f_it)
       {
         vector<Size> f_neighbors;
-        kd_data.getNeighborhood(*f_it, f_neighbors, true);
+        kd_data.getNeighborhood(*f_it, f_neighbors, rt_tol_secs_, mz_tol_, mz_ppm_, true);
         for (vector<Size>::const_iterator it = f_neighbors.begin(); it != f_neighbors.end(); ++it)
         {
           if (!assigned[*it])
@@ -335,16 +392,11 @@ namespace OpenMS
 
   ClusterProxyKD FeatureGroupingAlgorithmKD::computeBestClusterForCenter_(Size i, vector<Size>& cf_indices, const vector<Int>& assigned, const KDTreeFeatureMaps& kd_data) const
   {
-    // for scaling distances relative to tolerance windows below
-    pair<double, double> dummy_mz_win = Math::getTolWindow(1000, mz_tol_, mz_ppm_);
-    double max_rt_dist = rt_tol_secs_;
-    double max_mz_dist = (dummy_mz_win.second - dummy_mz_win.first) / 2;
-
     // compute i's neighborhood, together with a look-up table
     // map index -> corresponding points
     map<Size, vector<Size> > points_for_map_index;
     vector<Size> neighbors;
-    kd_data.getNeighborhood(i, neighbors, true);
+    kd_data.getNeighborhood(i, neighbors, rt_tol_secs_, mz_tol_, mz_ppm_, true);
     Int charge_i = kd_data.charge(i);
     for (vector<Size>::const_iterator it = neighbors.begin(); it != neighbors.end(); ++it)
     {
@@ -366,13 +418,12 @@ namespace OpenMS
 
       // choose a point j with minimal distance to center i
       double min_dist = numeric_limits<double>::max();
-      Size best_index = numeric_limits<double>::max();
+      Size best_index = numeric_limits<Size>::max();
       for (vector<Size>::const_iterator c_it = candidates.begin(); c_it != candidates.end(); ++c_it)
       {
-        double dist = distance_(kd_data.mz(*c_it) / max_mz_dist,
-                                kd_data.rt(*c_it) / max_rt_dist,
-                                kd_data.mz(i) / max_mz_dist,
-                                kd_data.rt(i) / max_rt_dist);
+        double dist = const_cast<FeatureDistance&>(feature_distance_)(*(kd_data.feature(*c_it)),
+                                                                      *(kd_data.feature(i))).second;
+
         if (dist < min_dist)
         {
           min_dist = dist;
@@ -401,11 +452,6 @@ namespace OpenMS
     cf.setQuality(avg_quality);
     cf.computeConsensus();
     out.push_back(cf);
-  }
-
-  double FeatureGroupingAlgorithmKD::distance_(double mz_1, double rt_1, double mz_2, double rt_2) const
-  {
-    return sqrt(pow((mz_1 - mz_2), 2) + pow((rt_1 - rt_2), 2));
   }
 
 } // namespace OpenMS

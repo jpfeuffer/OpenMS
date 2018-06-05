@@ -2,7 +2,7 @@
 //                   OpenMS -- Open-Source Mass Spectrometry
 // --------------------------------------------------------------------------
 // Copyright The OpenMS Team -- Eberhard Karls University Tuebingen,
-// ETH Zurich, and Freie Universitaet Berlin 2002-2016.
+// ETH Zurich, and Freie Universitaet Berlin 2002-2017.
 //
 // This software is released under a three-clause BSD license:
 //  * Redistributions of source code must retain the above copyright
@@ -343,7 +343,7 @@ protected:
   ConsensusMap::FileDescriptions files_; // information about files involved
   bool spectral_counting_; // quantification based on spectral counting?
 
-  void registerOptionsAndFlags_()
+  void registerOptionsAndFlags_() override
   {
     registerInputFile_("in", "<file>", "", "Input file");
     setValidFormats_("in", ListUtils::create<String>("featureXML,consensusXML,idXML"));
@@ -653,7 +653,7 @@ protected:
   }
 
 
-  ExitCodes main_(int, const char**)
+  ExitCodes main_(int, const char**) override
   {
     String in = getStringOption_("in");
     String out = getStringOption_("out");

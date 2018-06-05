@@ -2,7 +2,7 @@
 //                   OpenMS -- Open-Source Mass Spectrometry
 // --------------------------------------------------------------------------
 // Copyright The OpenMS Team -- Eberhard Karls University Tuebingen,
-// ETH Zurich, and Freie Universitaet Berlin 2002-2016.
+// ETH Zurich, and Freie Universitaet Berlin 2002-2017.
 //
 // This software is released under a three-clause BSD license:
 //  * Redistributions of source code must retain the above copyright
@@ -80,7 +80,7 @@ KDTreeFeatureNode::value_type KDTreeFeatureNode::operator[](Size i) const
   else
   {
     const String& err_msg = "Indices other than 0 (RT) and 1 (m/z) are not allowed!";
-    throw Exception::ElementNotFound(__FILE__, __LINE__, __PRETTY_FUNCTION__, err_msg);
+    throw Exception::ElementNotFound(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION, err_msg);
   }
 }
 

@@ -2,7 +2,7 @@
 //                   OpenMS -- Open-Source Mass Spectrometry
 // --------------------------------------------------------------------------
 // Copyright The OpenMS Team -- Eberhard Karls University Tuebingen,
-// ETH Zurich, and Freie Universitaet Berlin 2002-2016.
+// ETH Zurich, and Freie Universitaet Berlin 2002-2017.
 //
 // This software is released under a three-clause BSD license:
 //  * Redistributions of source code must retain the above copyright
@@ -34,12 +34,14 @@
 
 #include <OpenMS/CONCEPT/ClassTest.h>
 #include <OpenMS/test_config.h>
-#include <OpenMS/KERNEL/StandardTypes.h>
-#include <OpenMS/FORMAT/FileHandler.h>
 
 ///////////////////////////
 #include <OpenMS/FORMAT/ConsensusXMLFile.h>
 ///////////////////////////
+
+#include <OpenMS/KERNEL/StandardTypes.h>
+#include <OpenMS/FORMAT/FileHandler.h>
+#include <OpenMS/KERNEL/MSExperiment.h>
 
 #include <OpenMS/DATASTRUCTURES/ListUtils.h>
 
@@ -58,8 +60,8 @@ START_TEST(ConsensusXMLFile, "$Id$")
 /////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////
 
-ConsensusXMLFile * ptr = 0;
-ConsensusXMLFile* nullPointer = 0;
+ConsensusXMLFile * ptr = nullptr;
+ConsensusXMLFile* nullPointer = nullptr;
 START_SECTION((ConsensusXMLFile()))
 ptr = new ConsensusXMLFile();
 TEST_NOT_EQUAL(ptr, nullPointer)

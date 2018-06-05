@@ -259,7 +259,7 @@ protected:
     return EXECUTION_OK;
   }
 
-  ExitCodes main_(int, const char**)
+  ExitCodes main_(int, const char**) override
   {
     //CONSTANTS
     static const UInt maximum_length = 50;
@@ -284,7 +284,7 @@ protected:
     OligoModel oligomodel = OligoModel();
     LibSVMEncoder encoder;
     // Usage depending on kernel
-    svm_problem* prediction_data = NULL;
+    svm_problem* prediction_data = nullptr;
     SVMData prediction_samples;
     // Restrictions
     String allowed_amino_acid_characters = "ACDEFGHIKLMNPQRSTVWY";

@@ -2,7 +2,7 @@
 //                   OpenMS -- Open-Source Mass Spectrometry
 // --------------------------------------------------------------------------
 // Copyright The OpenMS Team -- Eberhard Karls University Tuebingen,
-// ETH Zurich, and Freie Universitaet Berlin 2002-2016.
+// ETH Zurich, and Freie Universitaet Berlin 2002-2017.
 //
 // This software is released under a three-clause BSD license:
 //  * Redistributions of source code must retain the above copyright
@@ -95,21 +95,6 @@ Size KDTreeFeatureMaps::numMaps() const
   return num_maps_;
 }
 
-double KDTreeFeatureMaps::rtTolerance() const
-{
-  return rt_tol_secs_;
-}
-
-double KDTreeFeatureMaps::mzTolerance() const
-{
-  return mz_tol_;
-}
-
-bool KDTreeFeatureMaps::mzPPM() const
-{
-  return mz_ppm_;
-}
-
 void KDTreeFeatureMaps::clear()
 {
   features_.clear();
@@ -122,13 +107,38 @@ void KDTreeFeatureMaps::optimizeTree()
   kd_tree_.optimize();
 }
 
-void KDTreeFeatureMaps::getNeighborhood(Size index, vector<Size>& result_indices, bool include_features_from_same_map) const
+void KDTreeFeatureMaps::getNeighborhood(Size index, vector<Size>& result_indices, double rt_tol, double mz_tol, bool mz_ppm, bool include_features_from_same_map, double max_pairwise_log_fc) const
 {
-  pair<double, double> rt_win = Math::getTolWindow(rt(index), rt_tol_secs_, false);
-  pair<double, double> mz_win = Math::getTolWindow(mz(index), mz_tol_, mz_ppm_);
+  pair<double, double> rt_win = Math::getTolWindow(rt(index), rt_tol, false);
+  pair<double, double> mz_win = Math::getTolWindow(mz(index), mz_tol, mz_ppm);
 
+  vector<Size> tmp_result;
   Size ignored_map_index = include_features_from_same_map ? numeric_limits<Size>::max() : map_index_[index];
-  queryRegion(rt_win.first, rt_win.second, mz_win.first, mz_win.second, result_indices, ignored_map_index);
+  queryRegion(rt_win.first, rt_win.second, mz_win.first, mz_win.second, tmp_result, ignored_map_index);
+
+  if (max_pairwise_log_fc < 0.0)
+  {
+    result_indices.insert(result_indices.end(), tmp_result.begin(), tmp_result.end());
+  }
+  else // max log foldchange check enabled
+  {
+    double int_1 = features_[index]->getIntensity();
+
+    for (vector<Size>::const_iterator it = tmp_result.begin(); it != tmp_result.end(); ++it)
+    {
+      double int_2 = features_[*it]->getIntensity();
+      double abs_log_fc = fabs(log10(int_2 / int_1));
+
+      // abs_log_fc could assume +nan or +inf if negative
+      // or zero intensity features were present, but
+      // this shouldn't cause a problem. they just wouldn't
+      // be used.
+      if (abs_log_fc <= max_pairwise_log_fc)
+      {
+        result_indices.push_back(*it);
+      }
+    }
+  }
 }
 
 void KDTreeFeatureMaps::queryRegion(double rt_low, double rt_high, double mz_low, double mz_high, vector<Size>& result_indices, Size ignored_map_index) const
@@ -166,9 +176,6 @@ void KDTreeFeatureMaps::applyTransformations(const vector<TransformationModelLow
 
 void KDTreeFeatureMaps::updateMembers_()
 {
-  rt_tol_secs_ = (double)(param_.getValue("rt_tol"));
-  mz_tol_ = (double)(param_.getValue("mz_tol"));
-  mz_ppm_ = (param_.getValue("mz_unit").toString() == "ppm");
 }
 
 }

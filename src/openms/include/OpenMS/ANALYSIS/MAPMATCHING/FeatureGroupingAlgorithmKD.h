@@ -2,7 +2,7 @@
 //                   OpenMS -- Open-Source Mass Spectrometry
 // --------------------------------------------------------------------------
 // Copyright The OpenMS Team -- Eberhard Karls University Tuebingen,
-// ETH Zurich, and Freie Universitaet Berlin 2002-2016.
+// ETH Zurich, and Freie Universitaet Berlin 2002-2017.
 //
 // This software is released under a three-clause BSD license:
 //  * Redistributions of source code must retain the above copyright
@@ -32,11 +32,11 @@
 // $Authors: Johannes Veit $
 // --------------------------------------------------------------------------
 
-#ifndef OPENMS_ANALYSIS_MAPMATCHING_FEATUREGROUPINGALGORITHMKD_H
-#define OPENMS_ANALYSIS_MAPMATCHING_FEATUREGROUPINGALGORITHMKD_H
+#pragma once
 
 #include <OpenMS/ANALYSIS/MAPMATCHING/FeatureGroupingAlgorithm.h>
 #include <OpenMS/ANALYSIS/QUANTITATION/KDTreeFeatureMaps.h>
+#include <OpenMS/ANALYSIS/MAPMATCHING/FeatureDistance.h>
 #include <OpenMS/CONCEPT/ProgressLogger.h>
 
 namespace OpenMS
@@ -186,22 +186,22 @@ public:
     FeatureGroupingAlgorithmKD();
 
     /// Destructor
-    virtual ~FeatureGroupingAlgorithmKD();
+    ~FeatureGroupingAlgorithmKD() override;
 
     /**
         @brief Applies the algorithm to feature maps
 
         @exception IllegalArgument is thrown if less than two input maps are given.
     */
-    virtual void group(const std::vector<FeatureMap>& maps, ConsensusMap& out);
+    void group(const std::vector<FeatureMap>& maps, ConsensusMap& out) override;
 
     /**
         @brief Applies the algorithm to consensus maps
 
         @exception IllegalArgument is thrown if less than two input maps are given.
     */
-    virtual void group(const std::vector<ConsensusMap>& maps,
-                       ConsensusMap& out);
+    void group(const std::vector<ConsensusMap>& maps,
+                       ConsensusMap& out) override;
 
     /// Creates a new instance of this class (for Factory)
     static FeatureGroupingAlgorithm* create()
@@ -243,9 +243,6 @@ private:
     /// Construct consensus feature and add to out map
     void addConsensusFeature_(const std::vector<Size>& indices, const KDTreeFeatureMaps& kd_data, ConsensusMap& out) const;
 
-    /// Distance between two points
-    double distance_(double mz_1, double rt_1, double mz_2, double rt_2) const;
-
     /// Current progress for logging
     SignedSize progress_;
 
@@ -257,8 +254,10 @@ private:
 
     /// m/z unit ppm?
     bool mz_ppm_;
+
+    /// Feature distance functor
+    FeatureDistance feature_distance_;
   };
 
 } // namespace OpenMS
 
-#endif // OPENMS_ANALYSIS_MAPMATCHING_FEATUREGROUPINGALGORITHMKD_H

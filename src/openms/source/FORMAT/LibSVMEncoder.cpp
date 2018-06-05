@@ -2,7 +2,7 @@
 //                   OpenMS -- Open-Source Mass Spectrometry
 // --------------------------------------------------------------------------
 // Copyright The OpenMS Team -- Eberhard Karls University Tuebingen,
-// ETH Zurich, and Freie Universitaet Berlin 2002-2016.
+// ETH Zurich, and Freie Universitaet Berlin 2002-2017.
 //
 // This software is released under a three-clause BSD license:
 //  * Redistributions of source code must retain the above copyright
@@ -34,12 +34,8 @@
 
 #include <OpenMS/FORMAT/LibSVMEncoder.h>
 #include <OpenMS/ANALYSIS/SVM/SVMWrapper.h>
-#include <OpenMS/FORMAT/TextFile.h>
-#include <OpenMS/SYSTEM/File.h>
 #include <OpenMS/CHEMISTRY/ModificationsDB.h>
 
-#include <map>
-#include <algorithm>
 #include <iostream>
 #include <fstream>
 
@@ -151,7 +147,7 @@ namespace OpenMS
 
     if (labels.size() != vectors.size())
     {
-      return NULL;
+      return nullptr;
     }
 
     svm_problem* problem = new svm_problem;
@@ -159,7 +155,7 @@ namespace OpenMS
 
     if (problem->l < 0) // dubious. Just makes sense if vectors.size() is larger than int and overflows
     {
-      return NULL;
+      return nullptr;
     }
 
     problem->x = new svm_node*[problem->l];
@@ -233,7 +229,7 @@ namespace OpenMS
 
   bool LibSVMEncoder::storeLibSVMProblem(const String& filename, const svm_problem* problem) const
   {
-    if (problem == NULL)
+    if (problem == nullptr)
     {
       return false;
     }
@@ -267,22 +263,22 @@ namespace OpenMS
 
   svm_problem* LibSVMEncoder::loadLibSVMProblem(const String& filename)
   {
-    svm_problem* data = NULL;
+    svm_problem* data = nullptr;
     UInt counter = 0;
     vector<String> parts;
     vector<String> temp_parts;
 
     if (!File::exists(filename))
     {
-      return NULL;
+      return nullptr;
     }
     if (!File::readable(filename))
     {
-      return NULL;
+      return nullptr;
     }
     if (File::empty(filename))
     {
-      return NULL;
+      return nullptr;
     }
 
     TextFile text_file(filename.c_str(), true);
@@ -305,7 +301,7 @@ namespace OpenMS
         if (temp_parts.size() < 2)
         {
           delete data;
-          return NULL;
+          return nullptr;
         }
         data->x[counter][j - 1].index = temp_parts[0].trim().toInt();
         data->x[counter][j - 1].value = temp_parts[1].trim().toFloat();
@@ -581,7 +577,7 @@ namespace OpenMS
     String temp_string = "";
 
     output.clear();
-    if (vector != NULL)
+    if (vector != nullptr)
     {
       for (Int i = 0; i < vector->l; ++i)
       {
@@ -755,7 +751,7 @@ namespace OpenMS
 
   void LibSVMEncoder::destroyProblem(svm_problem* problem)
   {
-    if (problem != NULL)
+    if (problem != nullptr)
     {
       for (Int i = 0; i < problem->l; i++)
       {
@@ -765,7 +761,7 @@ namespace OpenMS
       delete[] problem->x;
       delete problem;
     }
-    problem = NULL;
+    problem = nullptr;
   }
 
 } // namespace OpenMS

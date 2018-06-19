@@ -34,8 +34,14 @@
 #include <OpenMS/ANALYSIS/ID/BayesianProteinInferenceAlgorithm.h>
 #include <OpenMS/ANALYSIS/ID/FalseDiscoveryRate.h>
 #include <OpenMS/ANALYSIS/ID/IDBoostGraph.h>
-#include <set>
+#include <OpenMS/ANALYSIS/ID/PeptideIndexing.h>
 #include <OpenMS/CHEMISTRY/EnzymaticDigestion.h>
+#include <OpenMS/DATASTRUCTURES/FASTAContainer.h>
+#include <OpenMS/FORMAT/IdXMLFile.h>
+
+
+#include <set>
+
 
 using namespace std;
 
@@ -274,6 +280,158 @@ namespace OpenMS
     // write defaults into Param object param_
     defaultsToParam_();
     updateMembers_();
+  }
+
+
+
+  void BayesianProteinInferenceAlgorithm::inferPosteriorProbabilities(
+      std::vector<PeptideIdentification> pepIdConcatReplicates,
+      ProteinIdentification& proteinIds,
+      const String& db,
+      const ExperimentalDesign& expDesign
+      )
+  {
+    //check consistent settings
+    proteinIds.getHits().clear();
+    // get enzyme settings from peptideID
+    const DigestionEnzymeProtein enzyme = proteinIds.getSearchParameters().digestion_enzyme;
+    Size missed_cleavages = proteinIds.getSearchParameters().missed_cleavages;
+    ProteaseDigestion ed{};
+    ed.setEnzyme(&enzyme);
+    ed.setMissedCleavages(missed_cleavages);
+
+    FASTAContainer<TFI_File> fastaDB(db);
+    //assume that fasta is given for now. (you could use protein ids in the input idXMLs instead and merge)
+    //run peptideindexer (with integrated missing peptide counting or after?)
+    PeptideIndexing pi{};
+    Param piparams = pi.getDefaults();
+    piparams.setValue("annotate_nr_theoretical_peptides", true);
+    piparams.setValue("enzyme:name", enzyme.getName());
+    //TODO expose enzyme specificity. Default Full
+    //piparams.setValue("enzyme:specificity", full)
+    pi.setParameters(piparams);
+    std::vector<ProteinIdentification> singletonProteinId{proteinIds};
+    pi.run<FASTAContainer<TFI_File>>(fastaDB, singletonProteinId, pepIdConcatReplicates);
+
+
+    //TODO would be better if we set this after inference but only here we currently have
+    // non-const access.
+    proteinIds.setScoreType("Posterior Probability");
+    proteinIds.setHigherScoreBetter(true);
+
+    // init empty graph
+    IDBoostGraph ibg(proteinIds, pepIdConcatReplicates);
+    ibg.buildGraph(param_.getValue("all_PSMs").toBool());
+    ibg.computeConnectedComponents();
+    ibg.annotateIndistinguishableGroups();
+
+    //TODO how to perform group inference
+    // Three options:
+    // -collapse proteins to groups beforehand and run inference
+    // -use the automatically created indist. groups and report their posterior
+    // -calculate prior from proteins for the group beforehand and remove proteins from network (saves computation
+    //  because messages are not passed from prots to groups anymore.
+
+
+    //TODO Use gold search that goes deeper into the grid where it finds the best value.
+    //We have to do it on a whole dataset basis though (all CCs). -> I have to refactor to actually store as much
+    //as possible (it would be cool to store the inference graph but this is probably not possible bc that is why
+    //I split up in CCs.
+    // OR I could save the outputs! One value for every protein, per parameter set.
+
+    vector<double> gamma_search{0.5};
+    vector<double> beta_search{0.001};
+    vector<double> alpha_search{0.1, 0.3, 0.5, 0.7, 0.9};
+    //Percolator settings
+    //vector<double> alpha_search{0.008, 0.032, 0.128};
+
+    GridSearch<double,double,double> gs{alpha_search, beta_search, gamma_search};
+
+    std::array<size_t, 3> bestParams{};
+    //TODO run grid search on reduced graph?
+    //TODO if not, think about storing results temporary and only keep the best in the end
+    gs.evaluate(GridSearchEvaluator(param_, ibg, proteinIds), -1.0, bestParams);
+
+    std::cout << "Best params found at " << bestParams[0] << "," << bestParams[1] << "," << bestParams[2] << std::endl;
+
+    //TODO write graphfile?
+    //TODO let user modify Grid for GridSearch and/or provide some more default settings
+  }
+
+    void BayesianProteinInferenceAlgorithm::inferPosteriorProbabilities(std::vector<ProteinIdentification>& proteinIDs, std::vector<PeptideIdentification>& peptideIDs, OpenMS::ExperimentalDesign expDesign)
+  {
+    // get enzyme settings from peptideID
+    const DigestionEnzymeProtein enzyme = proteinIDs[0].getSearchParameters().digestion_enzyme;
+    Size missed_cleavages = proteinIDs[0].getSearchParameters().missed_cleavages;
+    EnzymaticDigestion ed{};
+    ed.setEnzyme(&enzyme);
+    ed.setMissedCleavages(missed_cleavages);
+
+    std::vector<StringView> tempDigests{};
+    // if not annotated, assign max nr of digests
+    for (auto& protein : proteinIDs[0].getHits())
+    {
+      // check for existing max nr peptides metavalue annotation
+      if (!protein.metaValueExists("maxNrTheoreticalDigests"))
+      {
+        if(!protein.getSequence().empty())
+        {
+          tempDigests.clear();
+          //TODO check which peptide lengths we should support. Parameter?
+          ed.digestUnmodified(protein.getSequence(), tempDigests);
+          //TODO add the discarded digestions products, too?
+          protein.setMetaValue("maxNrTheoreticalDigests", tempDigests.size());
+        }
+        else
+        {
+          //TODO Exception
+          std::cerr << "Protein sequence not annotated" << std::endl;
+        }
+      }
+    }
+
+    //TODO would be better if we set this after inference but only here we currently have
+    // non-const access.
+    proteinIDs[0].setScoreType("Posterior Probability");
+    proteinIDs[0].setHigherScoreBetter(true);
+
+    // init empty graph
+    IDBoostGraph ibg(proteinIDs[0], peptideIDs);
+    ibg.buildGraph(param_.getValue("all_PSMs").toBool());
+    ibg.computeConnectedComponents();
+    ibg.annotateIndistinguishableGroups();
+
+    //TODO how to perform group inference
+    // Three options:
+    // -collapse proteins to groups beforehand and run inference
+    // -use the automatically created indist. groups and report their posterior
+    // -calculate prior from proteins for the group beforehand and remove proteins from network (saves computation
+    //  because messages are not passed from prots to groups anymore.
+
+
+    //TODO Use gold search that goes deeper into the grid where it finds the best value.
+    //We have to do it on a whole dataset basis though (all CCs). -> I have to refactor to actually store as much
+    //as possible (it would be cool to store the inference graph but this is probably not possible bc that is why
+    //I split up in CCs.
+    // OR I could save the outputs! One value for every protein, per parameter set.
+
+    vector<double> gamma_search{0.5};
+    vector<double> beta_search{0.001};
+    vector<double> alpha_search{0.1, 0.3, 0.5, 0.7, 0.9};
+    //Percolator settings
+    //vector<double> alpha_search{0.008, 0.032, 0.128};
+
+    GridSearch<double,double,double> gs{alpha_search, beta_search, gamma_search};
+
+    std::array<size_t, 3> bestParams{};
+    //TODO run grid search on reduced graph?
+    //TODO if not, think about storing results temporary and only keep the best in the end
+    gs.evaluate(GridSearchEvaluator(param_, ibg, proteinIDs[0]), -1.0, bestParams);
+
+    std::cout << "Best params found at " << bestParams[0] << "," << bestParams[1] << "," << bestParams[2] << std::endl;
+
+    //TODO write graphfile?
+    //TODO let user modify Grid for GridSearch and/or provide some more default settings
   }
 
   void BayesianProteinInferenceAlgorithm::inferPosteriorProbabilities(std::vector<ProteinIdentification>& proteinIDs, std::vector<PeptideIdentification>& peptideIDs)

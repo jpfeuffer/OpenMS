@@ -38,6 +38,7 @@
 #include <OpenMS/ANALYSIS/ID/MessagePasserFactory.h>
 #include <OpenMS/DATASTRUCTURES/DefaultParamHandler.h>
 #include <OpenMS/CONCEPT/ProgressLogger.h>
+#include <OpenMS/METADATA/ExperimentalDesign.h>
 #include <OpenMS/METADATA/PeptideIdentification.h>
 #include <OpenMS/METADATA/ProteinIdentification.h>
 #include <OpenMS/MATH/MISC/GridSearch.h>
@@ -70,7 +71,12 @@ namespace OpenMS
     /// Perform inference. Writes its results into proteins (as new score) and peptides.
     void inferPosteriorProbabilities(std::vector<ProteinIdentification>& proteinIDs, std::vector<PeptideIdentification>& peptideIDs);
 
+    /// Load and merge ID files one by one from disk. Then perform inference.
+    void inferPosteriorProbabilities(const StringList& idXMLs, const String db,const ExperimentalDesign& expDesign, ProteinIdentification& proteinIDs, std::vector<PeptideIdentification>& peptideIDs);
+    void inferPosteriorProbabilities(std::vector<PeptideIdentification> pepIdReplicates, ProteinIdentification& proteinIds, const String& db);
+
   private:
+    /// The grid search object initialized with a default grid
     GridSearch<double,double,double> grid{{0.008,0.032,0.128},{0.001},{0.5}};
   };
 }

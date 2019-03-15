@@ -82,6 +82,8 @@ namespace OpenMS
     #pragma clang diagnostic push
     #pragma clang diagnostic ignored "-Wextra-semi"
 
+    BOOST_STRONG_TYPEDEF(boost::blank, PeptideClusterBinary)
+
     BOOST_STRONG_TYPEDEF(boost::blank, PeptideCluster)
 
     BOOST_STRONG_TYPEDEF(double, ProteinGroup)
@@ -96,8 +98,9 @@ namespace OpenMS
 
     //typedefs
     //TODO rename ProteinGroup type since it collides with the actual OpenMS ProteinGroup
-    typedef boost::variant<ProteinHit*, ProteinGroup, PeptideCluster, Peptide, RunIndex, Charge, PeptideHit*> IDPointer;
-    typedef boost::variant<const ProteinHit*, const ProteinGroup*, const PeptideCluster*, const Peptide, const RunIndex, const Charge, const PeptideHit*> IDPointerConst;
+    typedef boost::variant<ProteinHit*, ProteinGroup, PeptideCluster, PeptideClusterBinary, PeptideHit*> IDPointer;
+    typedef boost::variant<ProteinHit*, ProteinGroup, PeptideCluster, PeptideClusterBinary, Peptide, RunIndex, Charge, PeptideHit*> IDPointerExtended;
+    typedef boost::variant<const ProteinHit*, const ProteinGroup, const PeptideCluster, const Peptide, const RunIndex, const Charge, const PeptideHit*> IDPointerConst;
     //TODO check the impact of different data structures to store nodes/edges
     // Directed graphs would make the internal computations much easier (less in/out edge checking) but boost
     // does not allow computation of "non-strongly" connected components for directed graphs, which is what we would
@@ -186,6 +189,11 @@ namespace OpenMS
         return String("PepClust");
       }
 
+      OpenMS::String operator()(const PeptideClusterBinary& /*pc*/) const
+      {
+        return String("PepClustBin");
+      }
+
       OpenMS::String operator()(const Peptide& peptide) const
       {
         return peptide;
@@ -233,6 +241,11 @@ namespace OpenMS
       void operator()(const PeptideCluster& /*pc*/) const
       {
         stream_ << "PepClust" << std::endl;
+      }
+
+      void operator()(const PeptideClusterBinary& /*pc*/) const
+      {
+        stream_ << "PepClustBin" << std::endl;
       }
 
       void operator()(const Peptide& peptide) const
@@ -302,7 +315,7 @@ namespace OpenMS
     /// this will save computation time and oscillations later on.
     void clusterIndistProteinsAndPeptides();
     /// As above but adds charge, replicate and sequence layer of nodes (untested)
-    void clusterIndistProteinsAndPeptidesAndExtendGraph();
+    //void clusterIndistProteinsAndPeptidesAndExtendGraph();
 
     /// Annotate indistinguishable proteins by adding the groups to the underlying
     /// ProteinIdentification::ProteinGroups object. This has no effect on the graph itself.
@@ -318,7 +331,7 @@ namespace OpenMS
     /// @param idedSpectra vector of ProteinIdentifications with links to the proteins and PSMs in its PeptideHits
     /// @param use_all_psms If all or just the FIRST psm should be used
     void buildGraph(Size use_top_psms);
-    void buildGraphWithRunInfo(Size use_top_psms, bool readstore_run_info = true);
+    //void buildGraphWithRunInfo(Size use_top_psms, bool readstore_run_info = true);
 
     Size getNrConnectedComponents();
 

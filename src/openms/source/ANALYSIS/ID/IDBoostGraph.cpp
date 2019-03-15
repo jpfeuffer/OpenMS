@@ -69,7 +69,7 @@ namespace OpenMS
   };
 
   //TODO move to cpp file
-  struct IDBoostGraph::SequenceToReplicateChargeVariantHierarchy
+/*  struct IDBoostGraph::SequenceToReplicateChargeVariantHierarchy
   {
     //TODO only add the intermediate nodes if there are more than one "splits"
     SequenceToReplicateChargeVariantHierarchy(Size nrReplicates, int minCharge, int maxCharge):
@@ -90,7 +90,7 @@ namespace OpenMS
     }
 
     //TODO finish and rework (root not needed?)
-    void insertToGraph(vertex_t /*rootProteinVtx*/, Graph& graph)
+    void insertToGraph(vertex_t *//*rootProteinVtx*//*, Graph& graph)
     {
 
       for (const auto& seqContainer : seq_to_vecs_)
@@ -141,7 +141,7 @@ namespace OpenMS
     int minCharge_;
     Size nrCharges_;
     Size nrReplicates_;
-  };
+  };*/
 
   IDBoostGraph::IDBoostGraph(ProteinIdentification& proteins,
                              std::vector<PeptideIdentification>& idedSpectra):
@@ -160,7 +160,7 @@ namespace OpenMS
 
   //TODO actually to build the graph, the inputs could be passed const. But if you want to do sth
   //on the graph later it needs to be non-const. Overload this function or somehow make sure it can be used const.
-  void IDBoostGraph::buildGraphWithRunInfo(Size use_top_psms, bool readstore_run_info)
+/*  void IDBoostGraph::buildGraphWithRunInfo(Size use_top_psms, bool readstore_run_info)
   {
     StringList runs;
     proteins_.getPrimaryMSRunPath(runs);
@@ -231,7 +231,7 @@ namespace OpenMS
       pl.nextProgress();
     }
     pl.endProgress();
-  }
+  }*/
 
   //TODO actually to build the graph, the inputs could be passed const. But if you want to do sth
   //on the graph later it needs to be non-const. Overload this function or somehow make sure it can be used const.
@@ -287,8 +287,6 @@ namespace OpenMS
     pl.endProgress();
   }
 
-  //TODO actually to build the graph, the inputs could be passed const. But if you want to do sth
-  //on the graph later it needs to be non-const. Overload this function or somehow make sure it can be used const.
   /*
   template <class T>
   void IDBoostGraph::buildTheoreticalGraph(pair<int,int> chargeRange, unsigned int nrReplicates, FASTAContainer<T>& proteins)
@@ -396,38 +394,6 @@ namespace OpenMS
     pl.endProgress();
   }*/
 
-/* Const version
- * void IDBoostGraph::buildGraph(const ProteinIdentification& proteins, const std::vector<PeptideIdentification>& psms)
-  {
-    //TODO add support for (consensus) feature information
-
-    unordered_map<IDPointerConst, vertex_t, boost::hash<IDPointerConst>> vertex_map{};
-
-    unordered_map<string, const ProteinHit*> accession_map{};
-
-    // choose cbegin and cend if you do const
-    std::transform (proteins.getHits().cbegin(), proteins.getHits().cend(), inserter(accession_map, accession_map.begin()),
-                    [](const ProteinHit& p) {return make_pair<string, const ProteinHit*>(string(p.getAccession()), &p);});
-
-    // add const after auto for const version
-    for (auto const & psm : psms)
-    {
-      //TODO add psm nodes here or take only the best hit!!
-      for (auto const & peptide : psm.getHits())
-      {
-        IDPointerConst pep = &peptide;
-        vertex_t pepV = addVertexWithLookup_(pep, vertex_map);
-        for (auto const & proteinAcc : peptide.extractProteinAccessionsSet())
-        {
-          // assumes protein is present
-          IDPointerConst prot = accession_map.find(std::string(proteinAcc))->second;
-          vertex_t protV = addVertexWithLookup_(prot, vertex_map);
-          boost::add_edge(protV, pepV, gconst);
-        }
-      }
-    }
-  }*/
-
   /// Do sth on ccs
   void IDBoostGraph::applyFunctorOnCCs(std::function<unsigned long(Graph&)> functor)
   {
@@ -456,7 +422,7 @@ namespace OpenMS
       printGraph(LOG_INFO, curr_cc);
       LOG_INFO << "Printed cc " << i << std::endl;
       #endif
-
+	
       unsigned long result = functor(curr_cc);
 
       #ifdef INFERENCE_BENCH
@@ -645,178 +611,10 @@ namespace OpenMS
   }
 
 
-  /*void IDBoostGraph::clusterIndistProteinsAndPeptidesOld()
-  {
-    if (ccs_.empty()) {
-      throw Exception::MissingInformation(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION, "No connected components annotated. Run computeConnectedComponents first!");
-    }
-
-    #pragma omp parallel for
-    for (int i = 0; i < static_cast<int>(ccs_.size()); i += 1)
-    {
-      Graph& curr_cc = ccs_.at(i);
-
-      LOG_INFO << "Processing cc " << i << " with " << boost::num_vertices(curr_cc) << " vertices." << std::endl;
-
-      #ifdef INFERENCE_MT_DEBUG
-      LOG_INFO << "Processing on thread# " << omp_get_thread_num() << std::endl;
-      #endif
-
-      #ifdef INFERENCE_DEBUG
-      LOG_INFO << "Printing cc " << i << std::endl;
-      printGraph(LOG_INFO, curr_cc);
-      LOG_INFO << "Printed cc " << i << std::endl;
-      #endif
-
-      // Skip cc without peptide or protein
-      //TODO better to do quick bruteforce calculation if the cc is really small
-      if (boost::num_edges(curr_cc) >= 1)
-      {
-        // Cluster peptides with same parents
-        unordered_map< ProteinNodeSet, PeptideNodeSet, MyUIntSetHasher > pepClusters; //maps the parent (protein) set to peptides that have the same
-        unordered_map< PeptideNodeSet, ProteinNodeSet, MyUIntSetHasher > indistProteins; //find indist proteins
-
-        Graph::vertex_iterator ui, ui_end;
-        boost::tie(ui,ui_end) = boost::vertices(curr_cc);
-
-        // Cluster proteins
-        for (; ui != ui_end; ++ui)
-        {
-          IDBoostGraph::IDPointer curr_idObj = curr_cc[*ui];
-
-          //TODO introduce an enum for the types to make it more clear.
-          //Or use the static_visitor pattern: You have to pass the vertex with its neighbors as a second arg though.
-          if (curr_idObj.which() == 0) //protein: find indist. ones
-          {
-            //TODO assert that there is at least one peptide mapping to this peptide! Eg. Require IDFilter removeUnmatched before.
-            //Or just check rigorously here.
-            PeptideNodeSet childPeps;
-            Graph::adjacency_iterator adjIt, adjIt_end;
-            boost::tie(adjIt, adjIt_end) = boost::adjacent_vertices(*ui, curr_cc);
-            for (; adjIt != adjIt_end; ++adjIt)
-            {
-              if (curr_cc[*adjIt].which() == 3) //if there are only two types (pep,prot) this check for pep is actually unnecessary
-              {
-                childPeps.insert(*adjIt);
-              }
-            }
-
-            auto clusterIt = indistProteins.find(childPeps);
-            if (clusterIt != indistProteins.end())
-            {
-              clusterIt->second.insert(*ui);
-            }
-            else
-            {
-              indistProteins[childPeps] = ProteinNodeSet({*ui});
-            }
-          }
-        }
-
-        // add the protein groups to the graph
-        // and edges from the groups to the proteins for quick access
-        for (auto const& pepsToGrps : indistProteins)
-        {
-          if (pepsToGrps.second.size() <= 1)
-            continue;
-
-          //We can't point to protein groups while we fill them. Pointers invalidate in growing vectors.
-          //proteins_.getIndistinguishableProteins().push_back(ProteinGroup{});
-          //ProteinGroup& pg = proteins_.getIndistinguishableProteins().back();
-          auto grpVID = boost::add_vertex(&staticPG, curr_cc);
-
-          for (auto const &proteinVID : pepsToGrps.second)
-          {
-            //ProteinHit *proteinPtr = boost::get<ProteinHit*>(curr_cc[proteinVID]);
-            //pg.accessions.push_back(proteinPtr->getAccession());
-            boost::add_edge(proteinVID, grpVID, curr_cc);
-            for (auto const &pepVID : pepsToGrps.first)
-            {
-              boost::remove_edge(proteinVID, pepVID, curr_cc);
-            }
-          }
-          for (auto const &pepVID : pepsToGrps.first)
-          {
-            boost::add_edge(grpVID, pepVID, curr_cc);
-          }
-          //pg.probability = -1.0;
-        }
-
-
-
-        // reset iterator to loop through vertices again for peptide clusters
-        boost::tie(ui,ui_end) = boost::vertices(curr_cc);
-
-        for (; ui != ui_end; ++ui)
-        {
-          IDBoostGraph::IDPointer curr_idObj = curr_cc[*ui];
-          //TODO introduce an enum for the types to make it more clear.
-          if (curr_idObj.which() == 3) //peptide: find peptide clusters
-          {
-            //TODO assert that there is at least one protein mapping to this peptide! Eg. Require IDFilter removeUnmatched before.
-            //Or just check rigorously here.
-            ProteinNodeSet parents;
-            Graph::adjacency_iterator adjIt, adjIt_end;
-            boost::tie(adjIt, adjIt_end) = boost::adjacent_vertices(*ui, curr_cc);
-            for (; adjIt != adjIt_end; ++adjIt)
-            {
-              if (curr_cc[*adjIt].which() <= 1) // Either protein or protein group
-              {
-                parents.insert(*adjIt);
-              }
-            }
-
-            auto clusterIt = pepClusters.find(parents);
-            if (clusterIt != pepClusters.end())
-            {
-              clusterIt->second.insert(*ui);
-            }
-            else
-            {
-              pepClusters[parents] = PeptideNodeSet({*ui});
-            }
-          }
-        }
-
-        // we add an edge from protein to pepCluster and from pepCluster to peptides
-        // peptides can use the same info from there.
-        for (auto const& protsToPepClusters : pepClusters)
-        {
-          if (protsToPepClusters.first.size() <= 1)
-            continue;
-          auto pcVID = boost::add_vertex(&staticPC, curr_cc);
-          for (auto const& pgVID : protsToPepClusters.first)
-          {
-            boost::add_edge(pgVID, pcVID, curr_cc);
-            for (auto const& peptideVID : protsToPepClusters.second)
-            {
-              boost::remove_edge(pgVID, peptideVID, curr_cc);
-            }
-          }
-          for (auto const& peptideVID : protsToPepClusters.second)
-          {
-            boost::add_edge(pcVID, peptideVID, curr_cc);
-          }
-        }
-
-        #ifdef INFERENCE_DEBUG
-        LOG_INFO << "Printing cc " << i << "with intermediate nodes." << std::endl;
-        printGraph(LOG_INFO, curr_cc);
-        LOG_INFO << "Printed cc " << i << "with intermediate nodes." << std::endl;
-        #endif
-
-      }
-      else
-      {
-        LOG_INFO << "Skipped cc with only one type (proteins or peptides)" << std::endl;
-      }
-    }
-  }*/
-
   //needs run info annotated.
   //TODO new idea! Create GraphExtendedType. Every CC can be a different kind of graph then
   // and different functions work on different types or all types by templates
-  void IDBoostGraph::clusterIndistProteinsAndPeptidesAndExtendGraph()
+/*  void IDBoostGraph::clusterIndistProteinsAndPeptidesAndExtendGraph()
   {
 
     Size nrReplicates = 1;
@@ -1022,7 +820,7 @@ namespace OpenMS
         LOG_INFO << "Skipped cc with only one type (proteins or peptides)" << std::endl;
       }
     }
-  }
+  }*/
 
   void IDBoostGraph::clusterIndistProteinsAndPeptides()
   {
@@ -1129,7 +927,7 @@ namespace OpenMS
         for (; ui != ui_end; ++ui)
         {
           //TODO introduce an enum for the types to make it more clear.
-          if (curr_cc[*ui].which() == 6) //peptide: find peptide clusters
+          if (curr_cc[*ui].which() == 4) //peptide: find peptide clusters
           {
             //TODO assert that there is at least one protein mapping to this peptide! Eg. Require IDFilter removeUnmatched before.
             //Or just check rigorously here.
@@ -1160,20 +958,49 @@ namespace OpenMS
         // peptides can use the same info from there.
         for (auto const& protsToPepClusters : pepClusters)
         {
-          if (protsToPepClusters.first.size() <= 1)
-            continue;
-          auto pcVID = boost::add_vertex(PeptideCluster{}, curr_cc);
-          for (auto const& pgVID : protsToPepClusters.first)
+          if (protsToPepClusters.first.size() > 1)
           {
-            boost::add_edge(pgVID, pcVID, curr_cc);
-            for (auto const& peptideVID : protsToPepClusters.second)
+            auto pcVID = boost::add_vertex(PeptideCluster{}, curr_cc);
+            for (auto const &pgVID : protsToPepClusters.first)
             {
-              boost::remove_edge(pgVID, peptideVID, curr_cc);
+              boost::add_edge(pgVID, pcVID, curr_cc);
+              for (auto const &peptideVID : protsToPepClusters.second)
+              {
+                boost::remove_edge(pgVID, peptideVID, curr_cc);
+              }
+            }
+            if (protsToPepClusters.second.size() > 1)
+            {
+              auto pcBinVID = boost::add_vertex(PeptideClusterBinary{}, curr_cc);
+              boost::add_edge(pcVID, pcBinVID, curr_cc);
+              for (auto const& peptideVID : protsToPepClusters.second)
+              {
+                boost::add_edge(pcBinVID, peptideVID, curr_cc);
+              }
+            }
+            else
+            {
+              for (auto const& peptideVID : protsToPepClusters.second)
+              {
+                boost::add_edge(pcVID, peptideVID, curr_cc);
+              }
             }
           }
-          for (auto const& peptideVID : protsToPepClusters.second)
+          else
           {
-            boost::add_edge(pcVID, peptideVID, curr_cc);
+            if (protsToPepClusters.second.size() > 1)
+            {
+              auto pcBinVID = boost::add_vertex(PeptideClusterBinary{}, curr_cc);
+              for (auto const &pgVID : protsToPepClusters.first)
+              {
+                boost::add_edge(pgVID, pcBinVID, curr_cc);
+                for (auto const &peptideVID : protsToPepClusters.second)
+                {
+                  boost::add_edge(pcBinVID, peptideVID, curr_cc);
+                  boost::remove_edge(pgVID, peptideVID, curr_cc);
+                }
+              }
+            }
           }
         }
 
@@ -1272,6 +1099,10 @@ namespace OpenMS
   std::size_t hash_value(const IDBoostGraph::PeptideCluster&)
   {
     return 1;
+  }
+  std::size_t hash_value(const IDBoostGraph::PeptideClusterBinary&)
+  {
+    return 2;
   }
 
 }

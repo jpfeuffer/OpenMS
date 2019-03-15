@@ -61,11 +61,13 @@ public:
     }
 
     if ( ! every_nontrivial_edge_has_passed_at_least_one_message() )
+    {
       // This can happen if the graph is so large that not every edge
       // has been visited yet or if the graph contains a connected
       // component with no prior information:
       std::cerr << "Warning: Not every edge has passed a message (however posteriors may exist for the variables of interest). It may be that belief propagation hasn't yet converged (e.g., if this graph is large). If the graph is not large, check that your model doesn't add an edge using the wrong variable." << std::endl;
-
+      _graph.print(std::cout);
+    }
     std::vector<LabeledPMF<VARIABLE_KEY> > results;
 
     // Build a dictionary of varaibles to the message passers that

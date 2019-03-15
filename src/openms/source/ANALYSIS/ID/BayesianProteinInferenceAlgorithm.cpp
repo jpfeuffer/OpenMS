@@ -91,6 +91,7 @@ namespace OpenMS
     }
   };
 
+  /*
   /// A functor that specifies what to do on a connected component (IDBoostGraph::FilteredGraph)
   class BayesianProteinInferenceAlgorithm::GraphInferenceFunctor :
       public std::function<void(IDBoostGraph::Graph&)>
@@ -161,10 +162,10 @@ namespace OpenMS
               {
                 in.push_back(*nbIt);
               }
-              /*else
-              {
-                out.push_back(*nbIt);
-              }*/
+              //else
+              //{
+              //  out.push_back(*nbIt);
+              //}
             }
 
             //TODO introduce an enum for the types to make it more clear.
@@ -199,6 +200,8 @@ namespace OpenMS
               bigb.insert_dependency(mpf.createPeptideProbabilisticAdderFactor(in, *ui));
               if (annotate_group_posterior)
               {
+                // If BetheGraphBuilder is used, a singleton factor for this will be created automatically
+                //bigb.insert_dependency(mpf.createSumFactor(in.size(),*ui));
                 posteriorVars.push_back({*ui});
               }
             }
@@ -220,7 +223,7 @@ namespace OpenMS
             }
           }
 
-          // create factor graph for Bayesian network
+          // create factor graph for Bayesian network out of the dependencies specified in the builder
           InferenceGraph < IDBoostGraph::vertex_t > ig = bigb.to_graph();
           graph_mp_ownership_acquired = true;
 
@@ -270,7 +273,7 @@ namespace OpenMS
           // so we can easily read them later for the best params of the grid search
           return nrMessagesNeeded;
         }
-        catch (const std::runtime_error& /*e*/)
+        catch (const std::runtime_error& e)
         {
           //TODO print failing component and implement the following options
           // 1) Leave posteriors (e.g. if Percolator was ran before. Make sure they are PPs not PEPs)
@@ -292,6 +295,309 @@ namespace OpenMS
                 String(param_.getValue("model_parameters:prot_prior")) + "_c" +
                 String(param_.getValue("model_parameters:pep_prior")) + "_p" + String(pnorm) + "_"
                 + String(cnt_) + ".graphviz"
+                , std::ofstream::out | std::ofstream::app);
+            IDBoostGraph::printGraph(ofs, fg);
+          }
+          LOG_WARN << "Warning: Loopy belief propagation encountered a problem in a connected component. Skipping"
+                      " inference there." << std::endl;
+          return 0;
+        }
+      }
+      else
+      {
+        std::cout << "Skipped cc with only one type (proteins or peptides)" << std::endl;
+        return 0;
+      }
+    }
+  };*/
+
+  class BayesianProteinInferenceAlgorithm::GraphInferenceFunctor :
+      public std::function<void(IDBoostGraph::Graph&)>
+  {
+  public:
+    //TODO think about restructuring params (we do not need every param from the BPI class here.
+    const Param& param_;
+    unsigned int debug_lvl_;
+    unsigned long cnt_;
+
+    explicit GraphInferenceFunctor(const Param& param, unsigned int debug_lvl):
+        param_(param),
+        debug_lvl_(debug_lvl),
+        cnt_(0)
+    {}
+
+    unsigned long operator() (IDBoostGraph::Graph& fg) {
+      //TODO do quick bruteforce calculation if the cc is really small?
+      cnt_++;
+      // this skips CCs with just peps or prots. We only add edges between different types.
+      // and if there were no edges, it would not be a CC.
+      if (boost::num_vertices(fg) >= 2)
+      {
+        bool update_PSM_probabilities = param_.getValue("update_PSM_probabilities").toBool();
+        bool annotate_group_posterior = param_.getValue("annotate_group_probabilities").toBool();
+        bool user_defined_priors = param_.getValue("user_defined_priors").toBool();
+        bool regularize = param_.getValue("model_parameters:regularize").toBool();
+        double pnorm = param_.getValue("loopy_belief_propagation:p_norm_inference");
+        if (pnorm <= 0)
+        {
+          pnorm = std::numeric_limits<double>::infinity();
+        }
+
+        MessagePasserFactory<IDBoostGraph::vertex_t> mpf (param_.getValue("model_parameters:pep_emission"),
+                                                          param_.getValue("model_parameters:pep_spurious_emission"),
+                                                          param_.getValue("model_parameters:prot_prior"),
+                                                          pnorm,
+                                                          param_.getValue("model_parameters:pep_prior")); // the p used for marginalization: 1 = sum product, inf = max product
+
+        IDBoostGraph::Graph::vertex_iterator ui, ui_end;
+        boost::tie(ui,ui_end) = boost::vertices(fg);
+
+        // Store the IDs of the nodes for which you want the posteriors in the end
+        vector<vector<IDBoostGraph::vertex_t>> posteriorVars;
+
+        std::vector<ContextFreeMessagePasser<IDBoostGraph::vertex_t>*> mps(boost::num_vertices(fg));
+        std::vector<MessagePasser<IDBoostGraph::vertex_t>*> ctmps;
+        //std::unordered_map<IDBoostGraph::vertex_t, ContextFreeMessagePasser<IDBoostGraph::vertex_t>*> condmps;
+        std::vector<ContextFreeMessagePasser<IDBoostGraph::vertex_t>*> addmps;
+
+        //TODO the try section could in theory be slimmed down a little bit. First use of insertDependency maybe.
+        // check performance impact.
+        try
+        {
+          // first pass, table based message passers
+          for (; ui != ui_end; ++ui)
+          {
+            if (fg[*ui].which() == 4) // pep hit = psm
+            {
+              mps[*ui] = mpf.createPeptideEvidenceMP(*ui, boost::get<PeptideHit *>(fg[*ui])->getScore());
+              if (update_PSM_probabilities)
+              {
+                posteriorVars.push_back({*ui});
+              }
+            }
+            else if (fg[*ui].which() == 2) // pep group
+            {
+              mps[*ui] = mpf.createUninitMP();
+            }
+            else if (fg[*ui].which() == 1) // prot group
+            {
+              mps[*ui] = mpf.createUninitMP();
+
+              if (annotate_group_posterior)
+              {
+                posteriorVars.push_back({*ui});
+              }
+            }
+            else if (fg[*ui].which() == 0) // prot
+            {
+              //TODO modify createProteinFactor to start with a modified prior based on the number of missing
+              // peptides (later tweak to include conditional prob. for that peptide
+              if (user_defined_priors)
+              {
+                mps[*ui] = mpf.createProteinMP(*ui,
+                                               (double) boost::get<ProteinHit *>(fg[*ui])
+                                                   ->getMetaValue("Prior"));
+              }
+              else
+              {
+                mps[*ui] = mpf.createProteinMP(*ui);
+              }
+              posteriorVars.push_back({*ui});
+            }
+          }
+
+
+          // direct neighbors are proteins on the "left" side and peptides on the "right" side
+          // TODO Can be sped up using directed graph. Needs some restructuring in IDBoostGraph class first tho.
+          vector<IDBoostGraph::vertex_t> in;
+          unordered_set<IDBoostGraph::vertex_t> visitedPCB;
+          //second pass, convolution trees and connections
+          boost::tie(ui,ui_end) = boost::vertices(fg);
+          for (; ui != ui_end; ++ui)
+          {
+            if (fg[*ui].which() == 4) // pep hit = psm
+            {
+
+              IDBoostGraph::Graph::adjacency_iterator nbIt, nbIt_end;
+              boost::tie(nbIt, nbIt_end) = boost::adjacent_vertices(*ui, fg);
+
+              in.clear();
+              for (; nbIt != nbIt_end; ++nbIt)
+              {
+                if (fg[*nbIt].which() < fg[*ui].which())
+                {
+                  in.push_back(*nbIt);
+                }
+              }
+
+              assert(in.size() == 1);
+              if (fg[in[0]].which() == 3 ) // go back to PCB node and add SumEvidenceFactor, plus one2one factor for
+                //each out edge, then mark PCB as visited
+              {
+                if (visitedPCB.find(in[0]) == visitedPCB.end()) // not yet covered
+                {
+                  visitedPCB.insert(in[0]);
+                  vector<IDBoostGraph::vertex_t> tempin;
+                  vector<IDBoostGraph::vertex_t> tempout;
+                  IDBoostGraph::Graph::adjacency_iterator nbIt2, nbIt2_end;
+                  boost::tie(nbIt2, nbIt2_end) = boost::adjacent_vertices(in[0], fg);
+
+                  for (; nbIt2 != nbIt2_end; ++nbIt2)
+                  {
+                    if (fg[*nbIt2].which() < fg[in[0]].which()) // the PepClusterAdder variable
+                    {
+                      tempin.push_back(*nbIt2);
+                    }
+                    else
+                    {
+                      tempout.push_back(*nbIt2);
+                    }
+                  }
+
+                  assert(tempin.size() == 1);
+                  HUGINMessagePasser<IDBoostGraph::vertex_t>* transformMP = nullptr;
+                  if (regularize)
+                  {
+                    transformMP = mpf.createRegularizingSumEvidenceMP(boost::get<PeptideHit *>(fg[*ui])
+                                                                          ->getPeptideEvidences().size(), tempin[0], in[0]);
+                  }
+                  else
+                  {
+                    transformMP = mpf.createSumEvidenceMP(boost::get<PeptideHit *>(fg[*ui])
+                                                              ->getPeptideEvidences().size(), tempin[0], in[0]);
+                  }
+                  addmps.push_back(transformMP);
+                  assert(mps[tempin[0]] != nullptr);
+                  mps[tempin[0]]->bind_to(transformMP,new vector<IDBoostGraph::vertex_t>{tempin[0]});
+
+                  for (const auto& pep : tempout)
+                  {
+                    addmps.push_back(mpf.createOneToOneBinMP(in[0], pep));
+                    transformMP->bind_to(addmps.back(), new vector<IDBoostGraph::vertex_t>{in[0]});
+                    mps[pep]->bind_to(addmps.back(), new vector<IDBoostGraph::vertex_t>{pep});
+                  }
+                }
+              }
+              else //Prot or PG or PC
+              {
+                HUGINMessagePasser<IDBoostGraph::vertex_t>* transformMP = nullptr;
+                if (regularize)
+                {
+                  transformMP = mpf.createRegularizingSumEvidenceMP(boost::get<PeptideHit *>(fg[*ui])
+                                                                        ->getPeptideEvidences().size(), in[0], *ui);
+                }
+                else
+                {
+                  transformMP = mpf.createSumEvidenceMP(boost::get<PeptideHit *>(fg[*ui])
+                                                            ->getPeptideEvidences().size(), in[0], *ui);
+                }
+                addmps.push_back(transformMP);
+                assert(mps[in[0]] != nullptr);
+                assert(mps[*ui] != nullptr);
+                mps[in[0]]->bind_to(transformMP,new vector<IDBoostGraph::vertex_t>{in[0]});
+                mps[*ui]->bind_to(transformMP,new vector<IDBoostGraph::vertex_t>{*ui});
+              }
+            }
+            else if (fg[*ui].which() == 2 || fg[*ui].which() == 1) // pep or prot group
+            {
+              vector<ContextFreeMessagePasser<IDBoostGraph::vertex_t>*> inmps;
+              IDBoostGraph::Graph::adjacency_iterator nbIt, nbIt_end;
+              boost::tie(nbIt, nbIt_end) = boost::adjacent_vertices(*ui, fg);
+
+              in.clear();
+              for (; nbIt != nbIt_end; ++nbIt)
+              {
+                if (fg[*nbIt].which() < fg[*ui].which())
+                {
+                  in.push_back(*nbIt);
+                  assert(mps[*nbIt] != nullptr);
+                  inmps.push_back(mps[*nbIt]);
+                }
+              }
+              assert(mps[*ui] != nullptr);
+              ctmps.push_back(mpf.createPeptideProbabilisticAdderMP(in,inmps,*ui,mps[*ui]));
+            }
+          }
+
+          vector<MessagePasser<IDBoostGraph::vertex_t>*> allmps;
+          allmps.reserve(ctmps.size()+addmps.size()+mps.size());
+          for (const auto& mpp : mps)
+          {
+            if (mpp != nullptr)
+            {
+              allmps.push_back(std::move(mpp));
+            }
+          }
+          allmps.insert(allmps.end(),make_move_iterator(ctmps.begin()),make_move_iterator(ctmps.end()));
+          allmps.insert(allmps.end(),make_move_iterator(addmps.begin()),make_move_iterator(addmps.end()));
+
+          InferenceGraph <IDBoostGraph::vertex_t> ig{std::move(allmps)};
+
+          unsigned long maxMessages = param_
+              .getValue("loopy_belief_propagation:max_nr_iterations");
+          double initDampeningLambda = param_
+              .getValue("loopy_belief_propagation:dampening_lambda");
+          double initConvergenceThreshold = param_.getValue(
+              "loopy_belief_propagation:convergence_threshold");
+          unsigned long nrEdges = boost::num_edges(fg);
+
+          //TODO parametrize the type of scheduler.
+          PriorityScheduler<IDBoostGraph::vertex_t> scheduler(initDampeningLambda,
+                                                              initConvergenceThreshold,
+                                                              maxMessages);
+          scheduler.add_ab_initio_edges(ig);
+
+          BeliefPropagationInferenceEngine<IDBoostGraph::vertex_t> bpie(scheduler, ig);
+
+          auto posteriorFactors = bpie.estimate_posteriors_in_steps(posteriorVars,
+                                                                    {
+                                                                        std::make_tuple(std::max<unsigned long>(10000ul, nrEdges*nrEdges*2ul), initDampeningLambda, initConvergenceThreshold),
+                                                                        std::make_tuple(nrEdges*nrEdges, std::min(0.5,initDampeningLambda*10), std::min(0.01,initConvergenceThreshold*10)),
+                                                                        std::make_tuple(nrEdges*nrEdges/2ul, std::min(0.5,initDampeningLambda*100), std::min(0.01,initConvergenceThreshold*100))
+                                                                    });
+
+          // TODO move the writing of statistics from IDBoostGraph here and write more stats
+          //  like nr messages and failure/success
+          unsigned long nrMessagesNeeded = bpie.getNrMessagesPassed();
+
+          for (auto const &posteriorFactor : posteriorFactors)
+          {
+            double posterior = 1.0;
+            IDBoostGraph::SetPosteriorVisitor pv;
+            IDBoostGraph::vertex_t nodeId = posteriorFactor.ordered_variables()[0];
+            const PMF &pmf = posteriorFactor.pmf();
+            // If Index 0 is in the range of this result PMFFactor is probability is non-zero
+            // and the prob of presence is 1-P(p=0). Important in multi-value factors like protein groups.
+            if (0 >= pmf.first_support()[0] && 0 <= pmf.last_support()[0])
+            {
+              posterior = 1. - pmf.table()[0ul];
+            }
+            auto bound_visitor = std::bind(pv, std::placeholders::_1, posterior);
+            boost::apply_visitor(bound_visitor, fg[nodeId]);
+          }
+          //TODO we could write out/save the posteriors here,
+          // so we can easily read them later for the best params of the grid search
+          return nrMessagesNeeded;
+        }
+        catch (const std::runtime_error& /*e*/)
+        {
+          //TODO print failing component and implement the following options
+          // 1) Leave posteriors (e.g. if Percolator was ran before. Make sure they are PPs not PEPs)
+          // 2) set posteriors to priors
+          // 3) try another type of inference on that connected component. Different scheduler,
+          //    different extreme probabilities or maybe best: trivial aggregation-based inference.
+          // 4) Cancelling this and all other threads/ the loop and call this set of parameters invalid
+
+          //For now we just warn and continue with the rest of the iterations. Might still be a valid run.
+
+          if (debug_lvl_ > 2)
+          {
+            std::ofstream ofs;
+            ofs.open ("failed_cc_a"+ String(param_.getValue("model_parameters:pep_emission")) +
+                      "_b" + String(param_.getValue("model_parameters:pep_spurious_emission")) + "_g" +
+                      String(param_.getValue("model_parameters:prot_prior")) + "_c" +
+                      String(param_.getValue("model_parameters:pep_prior")) + "_p" + String(pnorm) + "_"
+                      + String(cnt_) + ".graphviz"
                 , std::ofstream::out | std::ofstream::app);
             IDBoostGraph::printGraph(ofs, fg);
           }
@@ -494,7 +800,8 @@ namespace OpenMS
     // set default parameter values
 
     /* More parameter TODOs:
-     * - grid search settings: e.g. fine, coarse, prob. threshold, lower convergence crit., own lists
+     * - grid search settings: e.g. fine, coarse, prob. threshold, run only on small CCs, lower convergence crit.
+     *  and/or lower max.#messages, user-defined parameter lists
      * - use own groups (and regularize)
      * - multiple runs
      * - what to do about multiple charge states or modded peptides
@@ -954,12 +1261,12 @@ namespace OpenMS
       //TODO set all unused (= not top) PSMs to 0 or remove! Currently not so bad because FDR also can take just the best.
 
     }
-    else
+/*    else
     {
       //TODO create run info parameter or even a different tool/class.
-      ibg.buildGraphWithRunInfo(param_.getValue("top_PSMs"));
+      //ibg.buildGraphWithRunInfo(param_.getValue("top_PSMs"));
       ibg.computeConnectedComponents();
-      ibg.clusterIndistProteinsAndPeptidesAndExtendGraph();
+      //ibg.clusterIndistProteinsAndPeptidesAndExtendGraph();
 
       vector<double> gamma_search{0.5};
       vector<double> beta_search{0.001};
@@ -982,6 +1289,6 @@ namespace OpenMS
       param_.setValue("model_parameters:pep_spurious_emission", bestBeta);
       ibg.applyFunctorOnCCs(ExtendedGraphInferenceFunctor(const_cast<const Param&>(param_)));
       ibg.applyFunctorOnCCsST(AnnotateIndistGroupsFunctor(proteinIDs[0]));
-    }
+    }*/
   }
 }

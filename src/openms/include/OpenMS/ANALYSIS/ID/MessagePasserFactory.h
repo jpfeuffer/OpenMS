@@ -44,7 +44,6 @@ typedef unsigned long int uiint;
 template <typename Label>
 class MessagePasserFactory {
 private:
-    const int minInputsPAF = 3;
     double alpha, beta, gamma, p, pepPrior;
     Label offset;
 
@@ -70,7 +69,27 @@ public:
 
     PseudoAdditiveDependency<Label> createBFPeptideProbabilisticAdderFactor(const std::set<Label> & parentProteinIDs, Label nId, const std::vector<TableDependency <Label> > & deps);
 
-    MessagePasserFactory<Label>(double alpha, double beta, double gamma, double p, double pepPrior);
+
+    HUGINMessagePasser<Label>* createUninitMP();
+    HUGINMessagePasser<Label>* createOneToOneBinMP(Label id1, Label id2);
+    HUGINMessagePasser<Label>* createProteinMP(Label id, int nrMissingPeps = 0);
+    HUGINMessagePasser<Label>* createProteinMP(Label id, double prior, int nrMissingPeps = 0);
+
+    HUGINMessagePasser<Label>* createPeptideEvidenceMP(Label id, double prob);
+
+    HUGINMessagePasser<Label>* createRegularizingSumEvidenceMP(size_t nrParents, Label nId, Label pepId);
+    HUGINMessagePasser<Label>* createSumEvidenceMP(size_t nrParents, Label nId, Label pepId);
+
+    HUGINMessagePasser<Label>* createSumMP(size_t nrParents, Label nId);
+
+    ConvolutionTreeMessagePasser<Label>* createPeptideProbabilisticAdderMP(
+        const std::vector<Label> & parentProteinIDs,
+        const std::vector<ContextFreeMessagePasser<Label>*> & parentMPs,
+        Label nId,
+        ContextFreeMessagePasser<Label>* outMP);
+
+
+  MessagePasserFactory<Label>(double alpha, double beta, double gamma, double p, double pepPrior);
 
 
 
@@ -203,12 +222,117 @@ AdditiveDependency<L> MessagePasserFactory<L>::createPeptideProbabilisticAdderFa
   return AdditiveDependency<L>(parents, {nId}, p);
 }
 
+
+/// Message Passer based
+
 template <typename L>
-PseudoAdditiveDependency<L> MessagePasserFactory<L>::createBFPeptideProbabilisticAdderFactor(const std::set<L> & parentProteinIDs, L nId, const std::vector<TableDependency<L>> & deps) {
-  std::vector<std::vector<L>> parents;
-  std::transform(parentProteinIDs.begin(), parentProteinIDs.end(), std::back_inserter(parents), [](const L& l){return std::vector<L>{l};});
-  return PseudoAdditiveDependency<L>(parents, {nId}, deps, p);
+HUGINMessagePasser<L>* MessagePasserFactory<L>::createUninitMP() {
+  return new Hyperedge<L>();
 }
+
+template <typename L>
+HUGINMessagePasser<L>* MessagePasserFactory<L>::createOneToOneBinMP(L id1, L id2) {
+	Tensor<double> table({2ul, 2ul});
+	unsigned long indexArr[2]{0ul,0ul};
+	table[indexArr] = 1.0;
+	unsigned long indexArr2[2]{1ul,1ul};
+	table[indexArr2] = 1.0;
+	LabeledPMF<L> lpmf({id1,id2}, PMF({0L,0L}, table));
+	return new HUGINMessagePasser<L>(lpmf,p);
+}
+
+template <typename L>
+HUGINMessagePasser<L>* MessagePasserFactory<L>::createProteinMP(L id, int nrMissingPeps) {
+  double prior = gamma;
+  if (nrMissingPeps > 0)
+  {
+    double powFactor = std::pow(1.0 - alpha, -nrMissingPeps);
+    prior = -prior/(prior * powFactor - prior - powFactor);
+  }
+  double table[] = {1.0 - prior, prior};
+  LabeledPMF<L> lpmf({id}, PMF({0L}, Tensor<double>::from_array(table)));
+  return new HUGINMessagePasser<L>(lpmf,p);
+}
+
+template <typename L>
+HUGINMessagePasser<L>* MessagePasserFactory<L>::createProteinMP(L id, double prior, int nrMissingPeps) {
+  if (nrMissingPeps > 0)
+  {
+    double powFactor = std::pow(1.0 - alpha, -nrMissingPeps);
+    prior = -prior/(prior * powFactor - prior - powFactor);
+  }
+  double table[] = {1.0 - prior, prior};
+  LabeledPMF<L> lpmf({id}, PMF({0L}, Tensor<double>::from_array(table)));
+  return new HUGINMessagePasser<L>(lpmf,p);
+}
+
+template <typename L>
+HUGINMessagePasser<L>* MessagePasserFactory<L>::createPeptideEvidenceMP(L id, double prob) {
+  double table[] = {(1 - prob) * (1 - pepPrior), prob * pepPrior};
+  LabeledPMF<L> lpmf({id}, PMF({0L}, Tensor<double>::from_array(table)));
+  return new HUGINMessagePasser<L>(lpmf,p);
+}
+
+
+template <typename L>
+HUGINMessagePasser<L>* MessagePasserFactory<L>::createSumEvidenceMP(size_t nrParents, L nId, L pepId) {
+  Tensor<double> table({static_cast<unsigned long>(nrParents + 1) , 2});
+  for (unsigned long i=0; i <= nrParents; ++i) {
+    double notConditional = notConditionalGivenSum(i);
+    unsigned long indexArr[2] = {i,0ul};
+    table[indexArr] = notConditional;
+    unsigned long indexArr2[2] = {i,1ul};
+    table[indexArr2] = 1.0 - notConditional;
+  }
+  //std::cout << table << std::endl;
+  LabeledPMF<L> lpmf({nId, pepId}, PMF({0L,0L}, table));
+  //std::cout << lpmf << std::endl;
+  return new HUGINMessagePasser<L>(lpmf,p);
+}
+
+template <typename L>
+HUGINMessagePasser<L>* MessagePasserFactory<L>::createRegularizingSumEvidenceMP(size_t nrParents, L nId, L pepId) {
+  Tensor<double> table({static_cast<unsigned long>(nrParents + 1) , 2});
+  unsigned long z[2]{0ul,0ul};
+  unsigned long z1[2]{0ul,1ul};
+  table[z] = 1. - beta;
+  table[z1] = beta;
+  for (unsigned long i=1; i <= nrParents; ++i) {
+    double notConditional = notConditionalGivenSum(i);
+    unsigned long indexArr[2] = {i,0ul};
+    table[indexArr] = notConditional / i;
+    unsigned long indexArr2[2] = {i,1ul};
+    table[indexArr2] = (1.0 - notConditional) / i;
+  }
+  //std::cout << table << std::endl;
+  LabeledPMF<L> lpmf({nId, pepId}, PMF({0L,0L}, table));
+  //std::cout << lpmf << std::endl;
+  return new HUGINMessagePasser<L>(lpmf,p);
+}
+
+template <typename L>
+HUGINMessagePasser<L>* MessagePasserFactory<L>::createSumMP(size_t nrParents, L nId) {
+  Tensor<double> table({nrParents+1});
+  for (unsigned long i=0; i <= nrParents; ++i) {
+    table[i] = 1.0/(nrParents+1);
+  }
+  //std::cout << table << std::endl;
+  LabeledPMF<L> lpmf({nId}, PMF({0L}, table));
+  //std::cout << lpmf << std::endl;
+  return new HUGINMessagePasser<L>(lpmf,p);
+}
+
+template <typename L>
+ConvolutionTreeMessagePasser<L>* MessagePasserFactory<L>::createPeptideProbabilisticAdderMP(
+    const std::vector<L> & parentProteinIDs,
+    const std::vector<ContextFreeMessagePasser<L>*> & parentMPs,
+    L nId,
+    ContextFreeMessagePasser<L>* outMP) {
+  std::vector<std::vector<L>*> parents;
+  std::transform(parentProteinIDs.begin(), parentProteinIDs.end(), std::back_inserter(parents), [](const L& l){return new std::vector<L>{l};});
+  return new ConvolutionTreeMessagePasser<L>(parentMPs,parents,outMP,new std::vector<L>{nId}, 1, p);
+}
+
 
 /// Works on a vector of protein indices (potentially not consecutive)
 // TODO we could recollect the protIDs from the union of parents.

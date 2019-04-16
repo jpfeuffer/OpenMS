@@ -35,6 +35,10 @@
 project("OpenSwathAlgo-3rd-party-libs")
 cmake_minimum_required(VERSION 2.8.3 FATAL_ERROR)
 
+# Do not use Clang tidy here and do not display warnings
+set(CMAKE_CXX_CLANG_TIDY "")
+add_compile_options("-w")
+
 # MIToolbox lib .. note this library will not be compiled
 # but we only expose the sources
 add_subdirectory(MIToolbox)

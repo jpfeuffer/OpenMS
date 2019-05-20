@@ -40,6 +40,7 @@
 #include <OpenMS/openms_package_version.h>
 
 #include <set>
+#include <include/OpenMS/FILTERING/ID/IDFilter.h>
 
 
 using namespace std;
@@ -507,6 +508,19 @@ namespace OpenMS
                        "false",
                        "Combine indistinguishable protein groups beforehand to only perform inference on them (probability for the whole group = is ANY of them present).");*/
 
+    defaults_.setValue("psm_probability_cutoff",
+                          0.001,
+                          "Remove PSMs with probabilities less than or equal this cutoff");
+    defaults_.setMinFloat("psm_probability_cutoff", 0.0);
+    defaults_.setMaxFloat("psm_probability_cutoff", 1.0);
+
+    defaults_.setValue("min_psms_extreme_probability",
+                          0.0,
+                          "Set PSMs with probability lower than this to this minimum probability.");
+    defaults_.setValue("max_psms_extreme_probability",
+                          1.0,
+                          "Set PSMs with probability higher than this to this maximum probability.");
+
     defaults_.setValue("top_PSMs",
                        1,
                        "Consider only top X PSMs per spectrum. 0 considers all.");
@@ -624,6 +638,36 @@ namespace OpenMS
     // write defaults into Param object param_
     defaultsToParam_();
     updateMembers_();
+
+    double probability_cutoff = param_.getValue("psm_probability_cutoff");
+    checkConvertAndFilterPepHits = [probability_cutoff](PeptideIdentification& pep_id){
+      String score_l = pep_id.getScoreType();
+      score_l = score_l.toLower();
+      if (score_l == "pep" || score_l == "posterior error probability")
+      {
+        for (auto &pep_hit : pep_id.getHits())
+        {
+          double newScore = 1. - pep_hit.getScore();
+          pep_hit.setScore(newScore);
+        }
+        pep_id.setScoreType("Posterior Probability");
+        pep_id.setHigherScoreBetter(true);
+        IDFilter::removeMatchingItems(pep_id.getHits(),
+            [&probability_cutoff](PeptideHit& hit){ return hit.getScore() <= probability_cutoff;});
+      }
+      else
+      {
+        if (score_l != "Posterior Probability")
+        {
+          throw OpenMS::Exception::InvalidParameter(
+              __FILE__,
+              __LINE__,
+              OPENMS_PRETTY_FUNCTION,
+              "Epifany needs Posterior (Error) Probabilities in the Peptide Hits. Use Percolator with PEP score"
+              "or run IDPosteriorErrorProbability first.");
+        }
+      }
+    };
   }
 
 
@@ -652,128 +696,87 @@ namespace OpenMS
 
     //Next line: PepIdxr needs to accept ConsensusMap and ExpDesign and annotate one ProtID per sample (frac group/rep combo)
     //pi.run<FASTAContainer<TFI_File>>(fastaDB, singletonProteinId, pepIdConcatReplicates);
+*/
 
-
-    //TODO would be better if we set this after inference but only here we currently have
-    // non-const access.
-    proteinIds.setScoreType("Posterior Probability");
-    proteinIds.setHigherScoreBetter(true);
-
-    // init empty graph
-    IDBoostGraph ibg(proteinIds, pepIdConcatReplicates);
-    ibg.buildGraph(param_.getValue("nr_PSMs").toBool());
-    ibg.computeConnectedComponents();
-    ibg.clusterIndistProteinsAndPeptides();
-
-    //TODO how to perform group inference
-    // Three options:
-    // -collapse proteins to groups beforehand and run inference
-    // -use the automatically created indist. groups and report their posterior
-    // -calculate prior from proteins for the group beforehand and remove proteins from network (saves computation
-    //  because messages are not passed from prots to groups anymore.
-
-
-    //TODO Use gold search that goes deeper into the grid where it finds the best value.
-    //We have to do it on a whole dataset basis though (all CCs). -> I have to refactor to actually store as much
-    //as possible (it would be cool to store the inference graph but this is probably not possible bc that is why
-    //I split up in CCs.
-    // OR I could save the outputs! One value for every protein, per parameter set.
-
-    vector<double> gamma_search{0.5};
-    vector<double> beta_search{0.001};
-    vector<double> alpha_search{0.1, 0.3, 0.5, 0.7, 0.9};
-    //Percolator settings
-    //vector<double> alpha_search{0.008, 0.032, 0.128};
-
-    GridSearch<double,double,double> gs{alpha_search, beta_search, gamma_search};
-
-    std::array<size_t, 3> bestParams{};
-    //TODO run grid search on reduced graph?
-    //TODO if not, think about storing results temporary and only keep the best in the end
-    gs.evaluate(GridSearchEvaluator(param_, ibg, proteinIds), -1.0, bestParams);
-
-    std::cout << "Best params found at " << bestParams[0] << "," << bestParams[1] << "," << bestParams[2] << std::endl;
-
-    //TODO write graphfile?
-    //TODO let user modify Grid for GridSearch and/or provide some more default settings
-  }*/
-
-/*    void BayesianProteinInferenceAlgorithm::inferPosteriorProbabilities(std::vector<ProteinIdentification>& proteinIDs, std::vector<PeptideIdentification>& peptideIDs, OpenMS::ExperimentalDesign expDesign)
+  void BayesianProteinInferenceAlgorithm::inferPosteriorProbabilities(ConsensusMap& cmap)
   {
-    // get enzyme settings from peptideID
-    const DigestionEnzymeProtein enzyme = proteinIDs[0].getSearchParameters().digestion_enzyme;
-    Size missed_cleavages = proteinIDs[0].getSearchParameters().missed_cleavages;
-    EnzymaticDigestion ed{};
-    ed.setEnzyme(&enzyme);
-    ed.setMissedCleavages(missed_cleavages);
+    cmap.applyFunctionOnPeptideIDs(checkConvertAndFilterPepHits);
 
-    std::vector<StringView> tempDigests{};
-    // if not annotated, assign max nr of digests
-    for (auto& protein : proteinIDs[0].getHits())
+    for (auto& proteinID : cmap.getProteinIdentifications())
     {
-      // check for existing max nr peptides metavalue annotation
-      if (!protein.metaValueExists("maxNrTheoreticalDigests"))
+      // Save current scores as priors if requested
+      bool user_defined_priors = param_.getValue("user_defined_priors").toBool();
+      if (user_defined_priors)
       {
-        if(!protein.getSequence().empty())
+        // Save current protein score into a metaValue
+        for (auto& prot_hit : proteinID.getHits())
         {
-          tempDigests.clear();
-          //TODO check which peptide lengths we should support. Parameter?
-          ed.digestUnmodified(protein.getSequence(), tempDigests);
-          //TODO add the discarded digestions products, too?
-          protein.setMetaValue("maxNrTheoreticalDigests", tempDigests.size());
-        }
-        else
-        {
-          //TODO Exception
-          std::cerr << "Protein sequence not annotated" << std::endl;
+          prot_hit.setMetaValue("Prior", prot_hit.getScore());
         }
       }
+
+      FalseDiscoveryRate pepFDR;
+      Param p = pepFDR.getParameters();
+
+      // I think it is best to always use the best PSM only for comparing PSM FDR before-after
+      // since inference might change the ranking.
+      p.setValue("use_all_hits", "false");
+      pepFDR.setParameters(p);
+      //TODO we have to limit the calculation to the current protein Run!!!
+      // also try to calc AUC partial only (e.g. up to 5% FDR)
+      LOG_INFO << "Peptide FDR AUC before protein inference: " << pepFDR.rocN(peptideIDs, 0) << std::endl;
+
+      proteinID.setScoreType("Posterior Probability");
+      proteinID.setInferenceEngine("Epifany");
+      proteinID.setInferenceEngineVersion(OPENMS_PACKAGE_VERSION);
+      proteinID.setHigherScoreBetter(true);
+      IDBoostGraph ibg(proteinID, cmap, 1, false);
+      inferPosteriorProbabilities(ibg);
+    }
+  }
+
+  void BayesianProteinInferenceAlgorithm::inferPosteriorProbabilities(IDBoostGraph& ibg)
+  {
+    GridSearch<double,double,double> gs = initGridSearchFromParams_();
+
+  }
+
+  GridSearch<double,double,double> BayesianProteinInferenceAlgorithm::initGridSearchFromParams_()
+  {
+    // Do not expand gamma_search when user_defined_priors is on. Would be unused.
+    double alpha = param_.getValue("model_parameters:pep_emission");
+    double beta = param_.getValue("model_parameters:pep_spurious_emission");
+    double gamma = param_.getValue("model_parameters:prot_prior");
+    vector<double> gamma_search;
+    vector<double> beta_search;
+    vector<double> alpha_search;
+    if (gamma > 1.0 || gamma < 0.0)
+    {
+      gamma_search = {0.2, 0.5, 0.7};
+    }
+    else
+    {
+      gamma_search = {gamma};
+    }
+    if (beta > 1.0 || beta < 0.0)
+    {
+      beta_search = {0.001};
+    }
+    else
+    {
+      beta_search = {beta};
+    }
+    if (alpha > 1.0 || alpha < 0.0)
+    {
+      alpha_search = {0.1, 0.25, 0.5, 0.65, 0.8};
+    }
+    else
+    {
+      alpha_search = {alpha};
     }
 
-    //TODO would be better if we set this after inference but only here we currently have
-    // non-const access.
-    proteinIDs[0].setScoreType("Posterior Probability");
-    proteinIDs[0].setHigherScoreBetter(true);
-
-    // init empty graph
-    IDBoostGraph ibg(proteinIDs[0], peptideIDs);
-    ibg.buildGraph(param_.getValue("nr_PSMs").toInt());
-    ibg.computeConnectedComponents();
-    ibg.clusterIndistProteinsAndPeptides();
-
-    //TODO how to perform group inference
-    // Three options:
-    // -collapse proteins to groups beforehand and run inference
-    // -use the automatically created indist. groups and report their posterior
-    // -calculate prior from proteins for the group beforehand and remove proteins from network (saves computation
-    //  because messages are not passed from prots to groups anymore.
-
-
-    //TODO Use gold search that goes deeper into the grid where it finds the best value.
-    //We have to do it on a whole dataset basis though (all CCs). -> I have to refactor to actually store as much
-    //as possible (it would be cool to store the inference graph but this is probably not possible bc that is why
-    //I split up in CCs.
-    // OR I could save the outputs! One value for every protein, per parameter set.
-
-    vector<double> gamma_search{0.5};
-    vector<double> beta_search{0.001};
-    vector<double> alpha_search{0.1, 0.3, 0.5, 0.7, 0.9};
-    //Percolator settings
-    //vector<double> alpha_search{0.008, 0.032, 0.128};
-
-    GridSearch<double,double,double> gs{alpha_search, beta_search, gamma_search};
-
-    std::array<size_t, 3> bestParams{};
-    //TODO run grid search on reduced graph?
-    //TODO if not, think about storing results temporary and only keep the best in the end
-    gs.evaluate(GridSearchEvaluator(param_, ibg, proteinIDs[0]), -1.0, bestParams);
-
-    std::cout << "Best params found at " << bestParams[0] << "," << bestParams[1] << "," << bestParams[2] << std::endl;
-
-    //TODO write graphfile?
-    //TODO let user modify Grid for GridSearch and/or provide some more default settings
-  }*/
-
+    return GridSearch<double,double,double>{alpha_search, beta_search, gamma_search};
+  }
 
   void BayesianProteinInferenceAlgorithm::inferPosteriorProbabilities(std::vector<ProteinIdentification>& proteinIDs, std::vector<PeptideIdentification>& peptideIDs)
   {
@@ -816,6 +819,9 @@ namespace OpenMS
       }
     }*/
 
+
+    //TODO actually loop over all proteinID runs.
+
     //TODO would be better if we set this after inference but only here we currently have
     // non-const access.
     //TODO if you do peptide rescoring, you could/should actually set the search_engine parameter
@@ -831,11 +837,8 @@ namespace OpenMS
     FalseDiscoveryRate pepFDR;
     Param p = pepFDR.getParameters();
 
-    // On second thought, I think it is best to always use the best PSM only
-    // inference might change the ranking.
-    // OLDTODO adapt, so it matches top_PSMs parameter (which is not bool).
-    // or just do a filter according to top_PSMs in the beginning and then
-    // use all here.
+    // I think it is best to always use the best PSM only for comparing PSM FDR before-after
+    // since inference might change the ranking.
     p.setValue("use_all_hits", "false");
     pepFDR.setParameters(p);
     LOG_INFO << "Peptide FDR AUC before protein inference: " << pepFDR.rocN(peptideIDs, 0) << std::endl;
@@ -850,138 +853,105 @@ namespace OpenMS
       }
     }
 
-    bool oldway = true;
-    if (oldway)
+    ibg.buildGraph(param_.getValue("top_PSMs"));
+    ibg.computeConnectedComponents();
+    ibg.clusterIndistProteinsAndPeptides();
+
+    //Note: How to perform group inference
+    // Three options:
+    // -(implemented) use the automatically created indist. groups and report their posterior
+    // - collapse proteins to groups beforehand and run inference
+    // - calculate prior from proteins for the group beforehand and remove proteins from network (saves computation
+    //  because messages are not passed from prots to groups anymore.
+
+
+    //TODO Use gold search that goes deeper into the grid where it finds the best value.
+    //We have to do it on a whole dataset basis though (all CCs). -> I have to refactor to actually store as much
+    //as possible (it would be cool to store the inference graph but this is probably not possible bc that is why
+    //I split up in CCs.
+    // OR you could save the outputs! One value for every protein, per parameter set.
+
+    // Do not expand gamma_search when user_defined_priors is on. Would be unused.
+    double alpha = param_.getValue("model_parameters:pep_emission");
+    double beta = param_.getValue("model_parameters:pep_spurious_emission");
+    double gamma = param_.getValue("model_parameters:prot_prior");
+    vector<double> gamma_search;
+    vector<double> beta_search;
+    vector<double> alpha_search;
+    if (gamma > 1.0 || gamma < 0.0)
     {
-      ibg.buildGraph(param_.getValue("top_PSMs"));
-      ibg.computeConnectedComponents();
-      ibg.clusterIndistProteinsAndPeptides();
-
-      //Note: How to perform group inference
-      // Three options:
-      // -(implemented) use the automatically created indist. groups and report their posterior
-      // - collapse proteins to groups beforehand and run inference
-      // - calculate prior from proteins for the group beforehand and remove proteins from network (saves computation
-      //  because messages are not passed from prots to groups anymore.
-
-
-      //TODO Use gold search that goes deeper into the grid where it finds the best value.
-      //We have to do it on a whole dataset basis though (all CCs). -> I have to refactor to actually store as much
-      //as possible (it would be cool to store the inference graph but this is probably not possible bc that is why
-      //I split up in CCs.
-      // OR you could save the outputs! One value for every protein, per parameter set.
-
-      // Do not expand gamma_search when user_defined_priors is on. Would be unused.
-      double alpha = param_.getValue("model_parameters:pep_emission");
-      double beta = param_.getValue("model_parameters:pep_spurious_emission");
-      double gamma = param_.getValue("model_parameters:prot_prior");
-      vector<double> gamma_search;
-      vector<double> beta_search;
-      vector<double> alpha_search;
-      if (gamma > 1.0 || gamma < 0.0)
-      {
-        gamma_search = {0.2, 0.5, 0.7};
-      }
-      else
-      {
-        gamma_search = {gamma};
-      }
-      if (beta > 1.0 || beta < 0.0)
-      {
-        beta_search = {0.001};
-      }
-      else
-      {
-        beta_search = {beta};
-      }
-      if (alpha > 1.0 || alpha < 0.0)
-      {
-        alpha_search = {0.1, 0.25, 0.5, 0.65, 0.8};
-      }
-      else
-      {
-        alpha_search = {alpha};
-      }
-
-      GridSearch<double,double,double> gs{alpha_search, beta_search, gamma_search};
-
-      std::array<size_t, 3> bestParams{{0, 0, 0}};
-
-      //Save initial settings and deactivate certain features to save time during grid search and to not
-      // interfere with later runs.
-      // TODO We could think about optimizing PSM FDR as another goal though.
-      bool update_PSM_probabilities = param_.getValue("update_PSM_probabilities").toBool();
-      param_.setValue("update_PSM_probabilities","false");
-
-      bool annotate_group_posteriors = param_.getValue("annotate_group_probabilities").toBool();
-      param_.setValue("annotate_group_probabilities","false");
-
-      //TODO run grid search on reduced graph? Then make sure, untouched protein/peps do not affect evaluation results.
-      //TODO if not, think about storing results temporary (file? mem?) and only keep the best in the end
-      //TODO think about running grid search on the small CCs only (maybe it's enough)
-      if (gs.getNrCombos() > 1)
-      {
-        std::cout << "Testing " << gs.getNrCombos() << " param combinations." << std::endl;
-        /*double res =*/ gs.evaluate(GridSearchEvaluator(param_, ibg, proteinIDs[0], debug_lvl_), -1.0, bestParams);
-      }
-      else
-      {
-        std::cout << "Only one combination specified: Skipping grid search." << std::endl;
-      }
-
-      double bestGamma = gamma_search[bestParams[2]];
-      double bestBeta = beta_search[bestParams[1]];
-      double bestAlpha = alpha_search[bestParams[0]];
-      std::cout << "Best params found at a=" << bestAlpha << ", b=" << bestBeta << ", g=" << bestGamma << std::endl;
-      std::cout << "Running with best parameters:" << std::endl;
-      param_.setValue("model_parameters:prot_prior", bestGamma);
-      param_.setValue("model_parameters:pep_emission", bestAlpha);
-      param_.setValue("model_parameters:pep_spurious_emission", bestBeta);
-      // Reset original values for those two options
-      param_.setValue("update_PSM_probabilities", update_PSM_probabilities ? "true" : "false");
-      param_.setValue("annotate_group_probabilities", annotate_group_posteriors ? "true" : "false");
-      ibg.applyFunctorOnCCs(GraphInferenceFunctor(const_cast<const Param&>(param_), debug_lvl_));
-
-
-      LOG_INFO << "Peptide FDR AUC after protein inference: " << pepFDR.rocN(peptideIDs, 0) << std::endl;
-      ibg.applyFunctorOnCCsST(AnnotateIndistGroupsFunctor(proteinIDs[0]));
-
-      // rename score_type in PepIDs? I think not. Posterior Probability is still fine. You can
-      // get the type from search_engine = Epifany + setting = on.
-      // TODO But we could set the "search engine". E.g. Percolator sets itself, too and is just a rescoring.
-      //if (update_PSM_probabilities)
-      //{}
-      //TODO set all unused (= not top) PSMs to 0 or remove! Currently not so bad because FDR also can take just the best.
-
+      gamma_search = {0.2, 0.5, 0.7};
     }
     else
     {
-      //TODO create run info parameter or even a different tool/class.
-      ibg.buildGraphWithRunInfo(param_.getValue("top_PSMs"));
-      ibg.computeConnectedComponents();
-      ibg.clusterIndistProteinsAndPeptidesAndExtendGraph();
-
-      vector<double> gamma_search{0.5};
-      vector<double> beta_search{0.001};
-      vector<double> alpha_search{0.1, 0.3, 0.5, 0.7, 0.9};
-
-      GridSearch<double,double,double> gs{alpha_search, beta_search, gamma_search};
-
-      std::array<size_t, 3> bestParams{{0, 0, 0}};
-      //TODO run grid search on reduced graph?
-      //TODO if not, think about storing results temporary (file? mem?) and only keep the best in the end
-      gs.evaluate(GridSearchEvaluator(param_, ibg, proteinIDs[0], debug_lvl_), -1.0, bestParams);
-
-      std::cout << "Best params found at " << bestParams[0] << "," << bestParams[1] << "," << bestParams[2] << std::endl;
-      double bestGamma = gamma_search[bestParams[2]];
-      double bestBeta = beta_search[bestParams[1]];
-      double bestAlpha = alpha_search[bestParams[0]];
-      std::cout << "Running with best parameters again." << std::endl;
-      param_.setValue("model_parameters:prot_prior", bestGamma);
-      param_.setValue("model_parameters:pep_emission", bestAlpha);
-      param_.setValue("model_parameters:pep_spurious_emission", bestBeta);
-      ibg.applyFunctorOnCCs(ExtendedGraphInferenceFunctor(const_cast<const Param&>(param_)));
-      ibg.applyFunctorOnCCsST(AnnotateIndistGroupsFunctor(proteinIDs[0]));
+      gamma_search = {gamma};
     }
+    if (beta > 1.0 || beta < 0.0)
+    {
+      beta_search = {0.001};
+    }
+    else
+    {
+      beta_search = {beta};
+    }
+    if (alpha > 1.0 || alpha < 0.0)
+    {
+      alpha_search = {0.1, 0.25, 0.5, 0.65, 0.8};
+    }
+    else
+    {
+      alpha_search = {alpha};
+    }
+
+    GridSearch<double,double,double> gs{alpha_search, beta_search, gamma_search};
+
+    std::array<size_t, 3> bestParams{{0, 0, 0}};
+
+    //Save initial settings and deactivate certain features to save time during grid search and to not
+    // interfere with later runs.
+    // TODO We could think about optimizing PSM FDR as another goal though.
+    bool update_PSM_probabilities = param_.getValue("update_PSM_probabilities").toBool();
+    param_.setValue("update_PSM_probabilities","false");
+
+    bool annotate_group_posteriors = param_.getValue("annotate_group_probabilities").toBool();
+    param_.setValue("annotate_group_probabilities","false");
+
+    //TODO run grid search on reduced graph? Then make sure, untouched protein/peps do not affect evaluation results.
+    //TODO if not, think about storing results temporary (file? mem?) and only keep the best in the end
+    //TODO think about running grid search on the small CCs only (maybe it's enough)
+    if (gs.getNrCombos() > 1)
+    {
+      std::cout << "Testing " << gs.getNrCombos() << " param combinations." << std::endl;
+      /*double res =*/ gs.evaluate(GridSearchEvaluator(param_, ibg, proteinIDs[0], debug_lvl_), -1.0, bestParams);
+    }
+    else
+    {
+      std::cout << "Only one combination specified: Skipping grid search." << std::endl;
+    }
+
+    double bestGamma = gamma_search[bestParams[2]];
+    double bestBeta = beta_search[bestParams[1]];
+    double bestAlpha = alpha_search[bestParams[0]];
+    std::cout << "Best params found at a=" << bestAlpha << ", b=" << bestBeta << ", g=" << bestGamma << std::endl;
+    std::cout << "Running with best parameters:" << std::endl;
+    param_.setValue("model_parameters:prot_prior", bestGamma);
+    param_.setValue("model_parameters:pep_emission", bestAlpha);
+    param_.setValue("model_parameters:pep_spurious_emission", bestBeta);
+    // Reset original values for those two options
+    param_.setValue("update_PSM_probabilities", update_PSM_probabilities ? "true" : "false");
+    param_.setValue("annotate_group_probabilities", annotate_group_posteriors ? "true" : "false");
+    ibg.applyFunctorOnCCs(GraphInferenceFunctor(const_cast<const Param&>(param_), debug_lvl_));
+
+
+    LOG_INFO << "Peptide FDR AUC after protein inference: " << pepFDR.rocN(peptideIDs, 0) << std::endl;
+    ibg.applyFunctorOnCCsST(AnnotateIndistGroupsFunctor(proteinIDs[0]));
+
+    // rename score_type in PepIDs? I think not. Posterior Probability is still fine. You can
+    // get the type from search_engine = Epifany + setting = on.
+    // TODO But we could set the "search engine". E.g. Percolator sets itself, too and is just a rescoring.
+    //if (update_PSM_probabilities)
+    //{}
+    //TODO set all unused (= not top) PSMs to 0 or remove! Currently not so bad because FDR also can take just the best.
+
   }
 }

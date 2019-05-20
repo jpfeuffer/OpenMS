@@ -264,9 +264,64 @@ namespace OpenMS
       return ret;
     }
 
+    map<vector<String>, set<unsigned>> ExperimentalDesign::getUniqueSampleRowToSampleMapping() const
+    {
+      map<vector<String>, set<unsigned> > rowContent2RowIdx;
+      auto factors = sample_section_.getFactors();
+      assert(!factors.empty());
+
+      factors.erase("Sample"); // we do not care about ID in duplicates
+
+
+      for (unsigned u : sample_section_.getSamples())
+      {
+        std::vector<String> valuesToHash{};
+        for (const String& fac : factors)
+        {
+          valuesToHash.emplace_back(sample_section_.getFactorValue(u, fac));
+        }
+        auto emplace_pair = rowContent2RowIdx.emplace(valuesToHash, set<unsigned>{});
+        emplace_pair.first->second.insert(u);
+      }
+
+      return rowContent2RowIdx;
+    }
+
+    map<unsigned, unsigned> ExperimentalDesign::getSampleToPrefractionationMapping() const
+    {
+      map<unsigned, unsigned> res;
+
+      // could happen when the Experimental Design was loaded from an idXML or consensusXML
+      // without additional Experimental Design file
+      if (sample_section_.getFactors().empty())
+      {
+        // no information about the origin of the samples -> assume uniqueness of all
+        unsigned nr(getNumberOfSamples());
+        for (unsigned i(1); i <= nr; ++i)
+        {
+          res[i] = i;
+        }
+      }
+      else
+      {
+        const map<vector<String>, set<unsigned>>& rowContent2RowIdx = getUniqueSampleRowToSampleMapping();
+        Size s(0);
+        for (const auto &condition : rowContent2RowIdx)
+        {
+          for (auto &sample : condition.second)
+          {
+            res.emplace(sample, s);
+          }
+          ++s;
+        }
+      }
+      return res;
+    }
+
     map<vector<String>, set<unsigned>> ExperimentalDesign::getConditionToSampleMapping() const
     {
       const auto& facset = sample_section_.getFactors();
+      assert(!facset.empty());
       set<String> nonRepFacs{};
 
       for (const String& fac : facset)
@@ -294,20 +349,34 @@ namespace OpenMS
     map<unsigned, unsigned> ExperimentalDesign::getSampleToConditionMapping() const
     {
       map<unsigned, unsigned> res;
-      const map<vector<String>, set<unsigned>>& rowContent2RowIdx = getConditionToSampleMapping();
-      Size s(0);
-      for (const auto& condition : rowContent2RowIdx)
+      // could happen when the Experimental Design was loaded from an idXML or consensusXML
+      // without additional Experimental Design file
+      if (sample_section_.getFactors().empty())
       {
-        for (auto& sample : condition.second)
+        // no information about the origin of the samples -> assume uniqueness of all
+        unsigned nr(getNumberOfSamples());
+        for (unsigned i(1); i <= nr; ++i)
         {
-          res.emplace(std::move(sample), s);
+          res[i] = i;
         }
-        ++s;
+      }
+      else
+      {
+        const map<vector<String>, set<unsigned>>& rowContent2RowIdx = getConditionToSampleMapping();
+        Size s(0);
+        for (const auto &condition : rowContent2RowIdx)
+        {
+          for (auto &sample : condition.second)
+          {
+            res.emplace(sample, s);
+          }
+          ++s;
+        }
       }
       return res;
     }
 
-    vector<vector<pair<String, unsigned>>> ExperimentalDesign::getSampleWOReplicatesToMSFilesMapping() const
+    vector<vector<pair<String, unsigned>>> ExperimentalDesign::getConditionToPathLabelVector() const
     {
       const map<vector<String>, set<unsigned>>& rowContent2RowIdx = getConditionToSampleMapping();
 
@@ -334,6 +403,18 @@ namespace OpenMS
         ++s;
       }
       return res;
+    }
+
+    map<pair< String, unsigned >, unsigned> ExperimentalDesign::getPathLabelToPrefractionationMapping(const bool basename) const
+    {
+      const auto& sToPreFrac = getSampleToPrefractionationMapping();
+      const auto& pToS = getPathLabelToSampleMapping(basename);
+      map<pair<String, unsigned>, unsigned> ret;
+      for (const auto& entry : pToS)
+      {
+        ret.emplace(entry.first, sToPreFrac.at(entry.second));
+      }
+      return ret;
     }
 
     map<pair<String, unsigned>, unsigned> ExperimentalDesign::getPathLabelToConditionMapping(const bool basename) const

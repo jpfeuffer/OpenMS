@@ -542,6 +542,46 @@ public:
                   items.end());
     }
 
+    /// Remove Hit items that satisfy a condition in one of our ID containers (e.g. vector of Peptide or ProteinIDs)
+    template <class IDContainer, class Predicate>
+    static void removeMatchingItemsUnroll(IDContainer& items, const Predicate& pred)
+    {
+      for (auto& item : items)
+      {
+        removeMatchingItems(item.getHits(), pred);
+      }
+    }
+
+    /// Keep Hit items that satisfy a condition in one of our ID containers (e.g. vector of Peptide or ProteinIDs)
+    template <class IDContainer, class Predicate>
+    static void keepMatchingItemsUnroll(IDContainer& items, const Predicate& pred)
+    {
+      for (auto& item : items)
+      {
+        keepMatchingItems(item.getHits(), pred);
+      }
+    }
+
+    template <class MapType, class Predicate>
+    static void keepMatchingPeptideHits(MapType& prot_and_pep_ids, Predicate& pred)
+    {
+      for (auto& feat : prot_and_pep_ids)
+      {
+        keepMatchingItemsUnroll(feat.getPeptideIdentifications(), pred);
+      }
+      keepMatchingItemsUnroll(prot_and_pep_ids.getUnassignedPeptideIdentifications(), pred);
+    }
+
+    template <class MapType, class Predicate>
+    static void removeMatchingPeptideHits(MapType& prot_and_pep_ids, Predicate& pred)
+    {
+      for (auto& feat : prot_and_pep_ids)
+      {
+        removeMatchingItemsUnroll(feat.getPeptideIdentifications(), pred);
+      }
+      removeMatchingItemsUnroll(prot_and_pep_ids.getUnassignedPeptideIdentifications(), pred);
+    }
+
     ///@}
 
 
@@ -892,7 +932,6 @@ public:
       }
     }
 
-    
 
     ///@}
 
@@ -1108,27 +1147,137 @@ public:
                                  all_peptides);
     }
 
-    /// Filters PeptideIdentifications with no hits
-    static void filterEmptyPeptideIDs(std::vector<PeptideIdentification>& pep_ids)
+    /// Filters a Consensus/FeatureMap by keeping the N best peptide hits for every spectrum
+    template <class MapType>
+    static void keepNBestPeptideHits(MapType& map, Size n)
     {
-      pep_ids.erase(std::remove_if(pep_ids.begin(), pep_ids.end(),
-                                  [](PeptideIdentification& p){return p.getHits().empty();}),pep_ids.end());
+      // The rank predicate needs annotated ranks, not sure if they are always updated. Use the following instead,
+      // which sorts Hits first.
+      for (auto& feat : map)
+      {
+        keepNBestHits(feat.getPeptideIdentifications(), n);
+      }
+      keepNBestHits(map.getUnassignedPeptideIdentifications(), n);
+    }
 
+    template <class MapType>
+    static void removeEmptyIdentifications(MapType& prot_and_pep_ids)
+    {
+      removeMatchingPeptideHits(prot_and_pep_ids, HasNoHits<PeptideHit>());
     }
 
     /// Filters PeptideHits from PeptideIdentification by keeping only the best peptide hits for every peptide sequence
-    static void filterBestPerPeptide(std::vector<PeptideIdentification>& pep_ids, bool ignore_mods, bool ignore_charges, Size nr_best_spectrum)
+    static void keepBestPerPeptide(std::vector<PeptideIdentification>& pep_ids, bool ignore_mods, bool ignore_charges, Size nr_best_spectrum)
     {
-
       annotateBestPerPeptide(pep_ids, ignore_mods, ignore_charges, nr_best_spectrum);
+      HasMetaValue<PeptideHit> best_per_peptide{"best_per_peptide", "true"};
+      keepMatchingItemsUnroll(pep_ids, best_per_peptide);
+    }
 
-      for (auto &pep : pep_ids)
+    static void keepBestPerPeptidePerRun(std::vector<ProteinIdentification>& prot_ids, std::vector<PeptideIdentification>& pep_ids, bool ignore_mods, bool ignore_charges, Size nr_best_spectrum)
+    {
+      annotateBestPerPeptidePerRun(prot_ids, pep_ids, ignore_mods, ignore_charges, nr_best_spectrum);
+      HasMetaValue<PeptideHit> best_per_peptide{"best_per_peptide", "true"};
+      keepMatchingItemsUnroll(pep_ids, best_per_peptide);
+    }
+
+    template <class MapType>
+    static void keepBestPerPeptidePerRun(MapType& prot_and_pep_ids, bool ignore_mods, bool ignore_charges, Size nr_best_spectrum)
+    {
+      const auto& prot_ids = prot_and_pep_ids.getProteinIdentifications();
+
+      std::map<std::string, std::unordered_map<std::string, std::map<Int, PeptideHit*>>> best_peps_per_run;
+      for (const auto& idrun : prot_ids)
       {
-        auto& hits = pep.getHits();
-        hits.erase(std::remove_if(hits.begin(), hits.end(),
-                                     [](const PeptideHit& p){return !p.metaValueExists("bestForItsPep") || !p.getMetaValue("bestForItsPep").toBool();}), hits.end());
+        best_peps_per_run[idrun.getIdentifier()] = std::unordered_map<std::string, std::map<Int, PeptideHit*>>();
       }
 
+      for (auto& feat : prot_and_pep_ids)
+      {
+        annotateBestPerPeptidePerRunWithData(best_peps_per_run, feat.getPeptideIdentifications(), ignore_mods, ignore_charges, nr_best_spectrum);
+      }
+
+      annotateBestPerPeptidePerRunWithData(best_peps_per_run, prot_and_pep_ids.getUnassignedPeptideIdentifications(), ignore_mods, ignore_charges, nr_best_spectrum);
+
+      HasMetaValue<PeptideHit> best_per_peptide{"best_per_peptide", "true"};
+      keepMatchingPeptideHits(prot_and_pep_ids, best_per_peptide);
+    }
+
+    static void annotateBestPerPeptidePerRun(const std::vector<ProteinIdentification>& prot_ids, std::vector<PeptideIdentification>& pep_ids, bool ignore_mods, bool ignore_charges, Size nr_best_spectrum)
+    {
+      std::map<std::string, std::unordered_map<std::string, std::map<Int, PeptideHit*>>> best_peps_per_run;
+      for (const auto& id : prot_ids)
+      {
+        best_peps_per_run[id.getIdentifier()] = std::unordered_map<std::string, std::map<Int, PeptideHit*>>();
+      }
+      annotateBestPerPeptidePerRunWithData(best_peps_per_run, pep_ids, ignore_mods, ignore_charges, nr_best_spectrum);
+    }
+
+    /// Annotates PeptideHits from PeptideIdentification if it is the best peptide hit for its peptide sequence
+    /// Adds metavalue "bestForItsPeps" which can be used for additional filtering.
+    static void annotateBestPerPeptidePerRunWithData(std::map<std::string, std::unordered_map<std::string, std::map<Int, PeptideHit*>>>& best_peps_per_run, std::vector<PeptideIdentification>& pep_ids, bool ignore_mods, bool ignore_charges, Size nr_best_spectrum)
+    {
+      for (auto &pep : pep_ids)
+      {
+        //skip if no hits (which almost could be considered and error or warning.
+        if (pep.getHits().empty())
+          continue;
+
+        bool higher_score_better = pep.isHigherScoreBetter();
+        //make sure that first = best hit
+        pep.sort();
+
+        auto& best_pep_map = best_peps_per_run[pep.getIdentifier()];
+
+        auto pepIt = pep.getHits().begin();
+        auto pepItEnd = nr_best_spectrum == 0 || pep.getHits().size() <= nr_best_spectrum ? pep.getHits().end() : pep.getHits().begin() + nr_best_spectrum;
+        for (; pepIt != pepItEnd; ++pepIt)
+        {
+          PeptideHit &hit = *pepIt;
+
+          String lookup_seq;
+          if (ignore_mods)
+          {
+            lookup_seq = hit.getSequence().toUnmodifiedString();
+          }
+          else
+          {
+            lookup_seq = hit.getSequence().toString();
+          }
+
+          int lookup_charge = 0;
+          if (!ignore_charges)
+          {
+            lookup_charge = hit.getCharge();
+          }
+
+
+          auto it_inserted = best_pep_map.emplace(std::move(lookup_seq), std::map<Int, PeptideHit*>());
+          auto it_inserted_chg = it_inserted.first->second.emplace(lookup_charge, &hit);
+          PeptideHit* &p = it_inserted_chg.first->second; //either the old one if already present, or this
+          if (!it_inserted_chg.second) //was already present -> possibly update
+          {
+            if (
+                (higher_score_better && (hit.getScore() > p->getScore())) ||
+                (!higher_score_better && (hit.getScore() < p->getScore()))
+                )
+            {
+              p->setMetaValue("bestForItsPep", "false");
+              hit.setMetaValue("bestForItsPep", "true");
+              p = &hit;
+            }
+            else //note that this was def. not the best
+            {
+              // TODO if it is only about filtering, we can omit writing this metavalue (absence = false)
+              hit.setMetaValue("bestForItsPep", "false");
+            }
+          }
+          else //first for that sequence (and optionally charge)
+          {
+            hit.setMetaValue("bestForItsPep", "true");
+          }
+        }
+      }
     }
 
     /// Annotates PeptideHits from PeptideIdentification if it is the best peptide hit for its peptide sequence

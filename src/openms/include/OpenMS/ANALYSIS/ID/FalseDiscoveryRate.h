@@ -37,6 +37,7 @@
 #include <OpenMS/DATASTRUCTURES/DefaultParamHandler.h>
 #include <OpenMS/METADATA/PeptideIdentification.h>
 #include <OpenMS/METADATA/ProteinIdentification.h>
+#include <OpenMS/KERNEL/ConsensusMap.h>
 
 #include <vector>
 #include <unordered_set>
@@ -100,7 +101,7 @@ public:
     void apply(std::vector<ProteinIdentification>& ids) const;
 
     /**
-    @brief Calculate the FDR based on PEPs pr PPs (if present) and modifies the IDs inplace
+    @brief Calculate the FDR based on PEPs or PPs (if present) and modifies the IDs inplace
 
     @param ids protein identifications, containing PEP scores (not necessarily) annotated with target decoy.
     */
@@ -120,6 +121,7 @@ public:
 
     /// simpler reimplemetation of the apply function above.
     void applyBasic(std::vector<PeptideIdentification> & ids);
+    void applyBasic(ConsensusMap & cmap, bool groups, bool proteins, bool peptides);
     void applyBasic(ProteinIdentification & id, bool groups_too = true);
 
     /// calculates the auc until the first fp_cutoff False positive pep IDs (currently only takes all runs together)
@@ -135,21 +137,39 @@ private:
     ///Not implemented
     FalseDiscoveryRate & operator=(const FalseDiscoveryRate &);
 
-    //TODO we could add identifier here. If we need to combine runs.
+
+    template<typename T> struct IsIDType
+    {
+      static bool const value = std::is_same<T, PeptideIdentification>::value || std::is_same<T, ProteinIdentification>::value;
+    };
+
+    template<typename T> struct IsHitType
+    {
+      static bool const value = std::is_same<T, PeptideHit>::value || std::is_same<T, ProteinHit>::value;
+    };
+    /*
+    void getPeptideScoresFromMap_(
+        std::vector<std::pair<double,bool>>& scores_labels,
+        const ConsensusMap & cmap,
+        bool all_hits,
+        int charge,
+        const String& identifier) const;
+
     void getScores_(
       std::vector<std::pair<double,bool>>& scores_labels, 
       const ProteinIdentification & id) const;
 
     void getScores_(
-        std::vector<std::pair<double,bool>>& scores_labels,
-        const std::vector<ProteinIdentification::ProteinGroup> & grps,
-        const std::unordered_set<std::string> & decoy_accs) const;
-
-    void getScores_(
       std::vector<std::pair<double,bool>>& scores_labels, 
       const std::vector<PeptideIdentification> & ids, 
       bool all_hits, 
-      int charge, String identifier) const;
+      int charge, const String& identifier) const;
+
+    void getScores_(
+        std::vector<std::pair<double,bool>>& scores_labels,
+        const PeptideIdentification& id,
+        bool all_hits,
+        int charge, const String& identifier) const;
 
     void getScores_(
       std::vector<std::pair<double,bool>>& scores_labels, 
@@ -158,46 +178,398 @@ private:
       bool all_hits, 
       int charge, 
       const String& identifier) const;
+      */
 
-    void setScores_(
-      const std::map<double,double>& scores_to_FDR, 
-      std::vector<PeptideIdentification> & id, 
-      const std::string& score_type, 
-      bool higher_better) const;
+    //TODO could be done with set of target accessions, too
+    //TODO even better: store nr targets and nr decoys when creating the groups!
+    //TODO alternative scoring is possible, too (e.g. ratio of tgts vs decoys),
+    // this requires templatization of the scores_labels vector though
+    void getScores_(
+        std::vector<std::pair<double,bool>>& scores_labels,
+        const std::vector<ProteinIdentification::ProteinGroup>& grps,
+        const std::unordered_set<std::string>& decoy_accs) const;
+
+    template<class ...Args>
+    void getPeptideScoresFromMap_(
+        std::vector<std::pair<double,bool>>& scores_labels,
+        const ConsensusMap & cmap, Args&& ... args) const
+    {
+      std::function<void (const PeptideIdentification &)> f =
+          [&, this](const PeptideIdentification& id) -> void {this->getScores_(scores_labels, id, std::forward<Args>(args)...);};
+      cmap.applyFunctionOnPeptideIDs(f);
+    }
+
+    void getScores_(
+        std::vector<std::pair<double,bool>>& scores_labels,
+        const ProteinIdentification & id) const
+    {
+
+      scores_labels.reserve(scores_labels.size() + id.getHits().size());
+      std::transform(id.getHits().begin(), id.getHits().end(),
+                     std::back_inserter(scores_labels),
+                     [](const ProteinHit& hit)
+                     {
+                       checkTDAnnotation_(hit);
+                       return std::make_pair<double,bool>(hit.getScore(), getTDLabel_(hit));
+                     }
+                    );
+
+    }
+
+    void getScores_(
+        std::vector<std::pair<double,bool>>& scores_labels,
+        const PeptideIdentification & id, bool all_hits, int charge, const String& identifier) const
+    {
+      if (id.getIdentifier() == identifier)
+      {
+        getScores_(scores_labels, id, all_hits, charge);
+      }
+    }
+
+
+    void getScores_(
+        std::vector<std::pair<double,bool>>& scores_labels,
+        const PeptideIdentification & id, bool all_hits, const String& identifier) const
+    {
+      if (id.getIdentifier() == identifier)
+      {
+        getScores_(scores_labels, id, all_hits);
+      }
+    }
+
+    void getScores_(
+        std::vector<std::pair<double,bool>>& scores_labels,
+        const PeptideIdentification & id, int charge, const String& identifier) const
+    {
+      if (id.getIdentifier() == identifier)
+      {
+        getScores_(scores_labels, id, charge);
+      }
+    }
+
+    template<typename IDType, typename std::enable_if<IsIDType<IDType>::value>::type* = nullptr>
+    void getScores_(
+        std::vector<std::pair<double,bool>>& scores_labels,
+        const IDType & id, const String& identifier) const
+    {
+      if (id.getIdentifier() == identifier)
+      {
+        getScores_(scores_labels, id);
+      }
+    }
+
+    static bool getTDLabel_(const MetaInfoInterface& idOrHit)
+    {
+      return std::string(idOrHit.getMetaValue("target_decoy"))[0] == 't';
+    }
+
+    template<class ...Args>
+    void getScores_(
+        std::vector<std::pair<double,bool>>& scores_labels,
+        const PeptideIdentification & id,
+        bool all_hits,
+        Args&& ... args) const
+    {
+      if (all_hits)
+      {
+        for (const PeptideHit &hit : id.getHits())
+        {
+          getScores_(scores_labels, hit, std::forward<Args>(args)...);
+        }
+      }
+      else
+      {
+        //TODO for speed I assume that they are sorted and first = best.
+        //id.sort();
+        const PeptideHit& hit = id.getHits()[0];
+        getScores_(scores_labels, hit, std::forward<Args>(args)...);
+      }
+    }
+
+    void getScores_(
+        std::vector<std::pair<double,bool>>& scores_labels,
+        const PeptideHit & hit,
+        int charge) const
+    {
+        if (charge == hit.getCharge())
+        {
+          checkTDAnnotation_(hit);
+          scores_labels.emplace_back(hit.getScore(), getTDLabel_(hit));
+        }
+    }
+
+    void getScores_(
+        std::vector<std::pair<double,bool>>& scores_labels,
+        const PeptideIdentification & id,
+        int charge) const
+    {
+      for (const PeptideHit &hit : id.getHits())
+      {
+        getScores_(scores_labels, hit, charge);
+      }
+    }
+
+    template<typename HitType, typename std::enable_if<IsHitType<HitType>::value>::type* = nullptr>
+    void getScores_(
+        std::vector<std::pair<double,bool>>& scores_labels,
+        const HitType & hit) const
+    {
+        getScores_(scores_labels, hit);
+    }
+
+    template<typename IDType, typename std::enable_if<IsIDType<IDType>::value>::type* = nullptr>
+    void getScores_(
+        std::vector<std::pair<double,bool>>& scores_labels,
+        const IDType & id) const
+    {
+      for (const typename IDType::HitType &hit : id.getHits())
+      {
+        getScores_(scores_labels, hit);
+      }
+    }
+
+    template<class ...Args>
+    void getScores_(
+        std::vector<std::pair<double,bool>>& scores_labels,
+        const std::vector<PeptideIdentification> & ids,
+        Args&& ... args) const
+    {
+      for (const auto& id : ids)
+      {
+        getScores_(scores_labels, id, std::forward<Args>(args)...);
+      }
+    }
+
+    void getScores_(std::vector<std::pair<double,bool>>& scores_labels, const std::vector<PeptideIdentification> & targets, const std::vector<PeptideIdentification> & decoys, bool all_hits, int charge, const String& identifier) const
+    {
+
+      for (const PeptideIdentification& id : targets)
+      {
+        if (!identifier.empty() && identifier != id.getIdentifier()) continue;
+
+        if (all_hits)
+        {
+          for (const PeptideHit& hit : id.getHits())
+          {
+            if (charge == 0 || charge == hit.getCharge()) scores_labels.push_back(getScoreLabel_(hit, FalseDiscoveryRate::TrueFunctor<const PeptideHit&>()));
+          }
+        }
+        else
+        {
+          //TODO for speed I assume that they are sorted and first = best.
+          //id.sort();
+          if (charge == 0 || charge == id.getHits()[0].getCharge()) scores_labels.push_back(getScoreLabel_(id.getHits()[0], FalseDiscoveryRate::TrueFunctor<const PeptideHit&>()));
+        }
+      }
+
+      for (const PeptideIdentification& id : decoys)
+      {
+        if (!identifier.empty() && identifier != id.getIdentifier()) continue;
+
+        if (all_hits)
+        {
+          for (const PeptideHit& hit : id.getHits())
+          {
+            if (charge == 0 || charge == hit.getCharge()) scores_labels.push_back(getScoreLabel_(hit, FalseDiscoveryRate::FalseFunctor<const PeptideHit&>()));
+          }
+        }
+        else
+        {
+          //TODO for speed I assume that they are sorted.
+          //id.sort();
+          if (charge == 0 || charge == id.getHits()[0].getCharge()) scores_labels.push_back(getScoreLabel_(id.getHits()[0], FalseDiscoveryRate::FalseFunctor<const PeptideHit&>()));
+        }
+      }
+    }
+
+
+    template <typename IDType, class ...Args>
+    void setScores_(const std::map<double,double>& scores_to_FDR, std::vector<IDType> & ids, const std::string& score_type,
+                    bool higher_better, Args& ... args) const
+    {
+      for (auto& id : ids)
+      {
+        setScores_(scores_to_FDR, id, score_type, higher_better, &args...);
+      }
+    }
+
+    template <class ...Args>
+    void setPeptideScoresForMap_(const std::map<double,double>& scores_to_FDR, ConsensusMap& cmap,
+        const std::string& score_type, bool higher_better, bool keep_decoy, Args&& ... args) const
+    {
+      std::function<void (PeptideIdentification &)> f =
+          [&,this](PeptideIdentification& id) -> void {this->setScores_(scores_to_FDR, id, score_type, higher_better, keep_decoy, std::forward<Args>(args)...);};
+      cmap.applyFunctionOnPeptideIDs(f);
+    }
+
 
     template <typename IDType>
-    void setScores_(const std::map<double,double>& scores_to_FDR, IDType & id, const std::string& score_type, bool higher_better) const
+    String setScoreType_(IDType& id, const std::string& score_type,
+                    bool higher_better) const
     {
       String old_score_type = id.getScoreType() + "_score";
       id.setScoreType(score_type);
       id.setHigherScoreBetter(higher_better);
-      for (auto& hit : id.getHits())
+      return old_score_type;
+    }
+
+    template <typename IDType>
+    void setScores_(const std::map<double,double>& scores_to_FDR, IDType & id, const std::string& score_type,
+        bool higher_better, bool keep_decoy) const
+    {
+      String old_score_type = setScoreType_(id, score_type, higher_better);
+
+      if (keep_decoy) //in-place set scores
       {
-        double old_score = hit.getScore();
-        hit.setScore(scores_to_FDR.lower_bound(hit.getScore())->second);
-        hit.setMetaValue(old_score_type, old_score);
+        setScores_(scores_to_FDR, id, old_score_type);
+      }
+      else
+      {
+        setScoresAndRemoveDecoys_(scores_to_FDR, id, old_score_type);
       }
     }
 
+    template <typename IDType>
+    void setScores_(const std::map<double,double>& scores_to_FDR, IDType & id,
+                    const String& old_score_type) const
+    {
+      std::vector<typename IDType::HitType>& hits = id.getHits();
+      for (auto &hit : hits)
+      {
+        setScore_(scores_to_FDR, hit, old_score_type);
+      }
+    }
+
+    template <typename IDType, class ...Args>
+    void setScoresAndRemoveDecoys_(const std::map<double,double>& scores_to_FDR, IDType & id,
+                    const String& old_score_type, Args ... args) const
+    {
+      std::vector<typename IDType::HitType>& hits = id.getHits();
+      std::vector<typename IDType::HitType> new_hits;
+      new_hits.reserve(hits.size());
+      for (auto &hit : hits)
+      {
+        setScoreAndMoveIfTarget_( scores_to_FDR, hit, old_score_type, new_hits, args...);
+      }
+      hits.swap(new_hits);
+    }
+
+    template <typename HitType>
+    void setScore_(const std::map<double,double>& scores_to_FDR, HitType & hit, const std::string& old_score_type) const
+    {
+      hit.setMetaValue(old_score_type, hit.getScore());
+      hit.setScore(scores_to_FDR.lower_bound(hit.getScore())->second);
+    }
+
+    template <typename HitType>
+    void setScoreAndMoveIfTarget_(const std::map<double,double>& scores_to_FDR, HitType & hit, const std::string& old_score_type,
+        std::vector<HitType>& new_hits) const
+    {
+      const String& target_decoy(hit.getMetaValue("target_decoy"));
+      if (target_decoy[0] == 't')
+      {
+        hit.setMetaValue(old_score_type, hit.getScore());
+        hit.setScore(scores_to_FDR.at(hit.getScore()));
+        new_hits.push_back(std::move(hit));
+      } // else do not move over
+    }
+
+    void setScoreAndMoveIfTarget_(const std::map<double,double>& scores_to_FDR, PeptideHit & hit, const std::string& old_score_type,
+         std::vector<PeptideHit>& new_hits, int charge) const
+    {
+      if (charge == hit.getCharge())
+      {
+        const String &target_decoy(hit.getMetaValue("target_decoy"));
+        if (target_decoy[0] == 't')
+        {
+          hit.setMetaValue(old_score_type, hit.getScore());
+          hit.setScore(scores_to_FDR.at(hit.getScore()));
+          new_hits.push_back(std::move(hit));
+        } // else do not move over
+      }
+      else // different charge, move over unchanged to process later at correct charge.
+      {
+        new_hits.push_back(std::move(hit));
+      }
+    }
+
+    template <typename IDType>
+    void setScores_(const std::map<double,double>& scores_to_FDR, IDType & id, const std::string& score_type,
+                    bool higher_better) const
+    {
+      String old_score_type = setScoreType_(id, score_type, higher_better);
+      setScores_(scores_to_FDR, id, old_score_type);
+    }
+
+    void setScores_(const std::map<double,double>& scores_to_FDR, PeptideIdentification& id, const std::string& score_type,
+                    bool higher_better, bool keep_decoy, int charge) const
+    {
+      String old_score_type = setScoreType_(id, score_type, higher_better);
+      if (keep_decoy) //in-place set scores
+      {
+        setScores_(scores_to_FDR, id, old_score_type, charge);
+      }
+      else
+      {
+        setScoresAndRemoveDecoys_<PeptideIdentification>(scores_to_FDR, id, old_score_type, charge);
+      }
+    }
+
+    void setScores_(const std::map<double,double>& scores_to_FDR, PeptideIdentification & id, const std::string& score_type,
+                    bool higher_better, bool keep_decoy, int charge, const String& identifier) const
+    {
+      if (id.getIdentifier() == identifier)
+      {
+        setScores_(scores_to_FDR, id, score_type, higher_better, keep_decoy, charge);
+      }
+    }
+
+    template <typename IDType>
+    void setScores_(const std::map<double,double>& scores_to_FDR, IDType & id, const std::string& score_type,
+                    bool higher_better, bool keep_decoy, const String& identifier) const
+    {
+      if (id.getIdentifier() == identifier)
+      {
+        setScores_(scores_to_FDR, id, score_type, higher_better, keep_decoy);
+      }
+    }
+
+    void setScores_(const std::map<double,double>& scores_to_FDR, PeptideIdentification & id, const std::string& score_type,
+                    bool higher_better, int charge, const String& identifier) const
+    {
+      if (id.getIdentifier() == identifier)
+      {
+        setScores_(scores_to_FDR, id, score_type, higher_better, charge);
+      }
+    }
+
+    template <typename IDType>
+    void setScores_(const std::map<double,double>& scores_to_FDR, IDType & id, const std::string& score_type,
+                    bool higher_better, const String& identifier) const
+    {
+      if (id.getIdentifier() == identifier)
+      {
+        setScores_(scores_to_FDR, id, score_type, higher_better);
+      }
+    }
+
+
+    //TODO could also get a keep_decoy flag when we define what a "decoy group" is -> keep all always for now
     void setScores_(
         const std::map<double,double>& scores_to_FDR,
         std::vector<ProteinIdentification::ProteinGroup>& grps,
         const std::string& score_type,
         bool higher_better) const;
 
-    template <typename IDType>
-    void checkTDAnnotation_ (const IDType & id) const
+    static void checkTDAnnotation_(const MetaInfoInterface & idOrHit)
     {
-      for (auto const& hit : id.getHits())
-      {
-        if (!hit.metaValueExists("target_decoy"))
+        if (!idOrHit.metaValueExists("target_decoy"))
         {
           throw Exception::MissingInformation(__FILE__,
                                               __LINE__,
                                               OPENMS_PRETTY_FUNCTION,
                                               "Meta value 'target_decoy' does not exist in all ProteinHits! Reindex the idXML file with 'PeptideIndexer'");
         }
-      }
     }
 
     template <typename HitType>

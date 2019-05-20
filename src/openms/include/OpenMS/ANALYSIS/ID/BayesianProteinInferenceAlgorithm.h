@@ -44,6 +44,7 @@
 #include <OpenMS/METADATA/ProteinIdentification.h>
 #include <OpenMS/MATH/MISC/GridSearch.h>
 #include <vector>
+#include <functional>
 
 namespace OpenMS
 {
@@ -66,23 +67,33 @@ namespace OpenMS
     /// connected components
     class ExtendedGraphInferenceFunctor;
 
-
-    /// Deprecated: A function object to pass into the IDBoostGraph class to perform algorithms on
-    /// connected components and on the fly finding groups (no preannotation needed)
-    class GraphInferenceFunctorNoGroups;
+    /// A function object to pass into the IDBoostGraph class to annotate and add
+    /// indistinguishable groups to the underlying ID objects based on the graph.
+    class AnnotateIndistGroupsFunctor;
 
     /// A function object to pass into the GridSearch;
     struct GridSearchEvaluator;
 
-    /// Perform inference. Writes its results into proteins (as new score) and peptides.
+    /// Perform inference. Writes its results into protein and (optionally) peptide hits (overwrites score).
+    /// Optionally adds indistinguishable protein groups with seperate scores, too.
+    /// Currently only takes first proteinID run.
+    /// TODO loop over all runs
     void inferPosteriorProbabilities(std::vector<ProteinIdentification>& proteinIDs, std::vector<PeptideIdentification>& peptideIDs);
 
-    /// Load and merge ID files one by one from disk. Then perform inference.
-    void inferPosteriorProbabilities(const StringList& idXMLs, const String db,const ExperimentalDesign& expDesign, ProteinIdentification& proteinIDs, std::vector<PeptideIdentification>& peptideIDs);
-    void inferPosteriorProbabilities(std::vector<PeptideIdentification> pepIdReplicates, ProteinIdentification& proteinIds, const String& db);
+    void inferPosteriorProbabilities(ConsensusMap& cmap);
 
   private:
-    class AnnotateIndistGroupsFunctor;
+
+    //TODO follow naming convention _
+    void applyFunctionOnPeptideHits(std::vector<PeptideIdentification>& idvec, std::function<void(PeptideHit&)>& f);
+    void applyFunctionOnPeptideHits(ConsensusMap& idvec, std::function<void(PeptideHit&)>& f);
+
+    void applyFunctionOnPeptideIDs(std::vector<PeptideIdentification>& idvec, std::function<void(PeptideIdentification&)>& f);
+    void applyFunctionOnPeptideIDs(ConsensusMap& idvec, std::function<void(PeptideIdentification&)>& f);
+
+    GridSearch<double,double,double> initGridSearchFromParams_();
+
+    std::function<void(PeptideIdentification&)> checkConvertAndFilterPepHits;
 
     /// The grid search object initialized with a default grid
     GridSearch<double,double,double> grid{{0.008,0.032,0.128},{0.001},{0.5}};

@@ -267,9 +267,6 @@ namespace OpenMS
 
       void operator()(ProteinHit* prot, double posterior) const
       {
-        #ifdef INFERENCE_DEBUG
-        std::cout << "set score " << posterior << " for " << prot->getAccession() << std::endl;
-        #endif
         prot->setScore(posterior);
       }
 
@@ -288,19 +285,37 @@ namespace OpenMS
     };
 
     /// Constructors
-    IDBoostGraph(ProteinIdentification &proteins, std::vector<PeptideIdentification>& idedSpectra);
-    IDBoostGraph(
-        ProteinIdentification &proteins,
-        std::vector<PeptideIdentification>& idedSpectra,
-        const ExperimentalDesign& ed);
+    IDBoostGraph(ProteinIdentification& proteins,
+                               std::vector<PeptideIdentification>& idedSpectra,
+                               Size use_top_psms,
+                               bool use_run_info);
 
-    /// Do sth on connected components (your functor object has to inherit from std::function)
+    IDBoostGraph(ProteinIdentification& proteins,
+                               std::vector<PeptideIdentification>& idedSpectra,
+                               Size use_top_psms,
+                               const ExperimentalDesign& ed);
+
+    IDBoostGraph(ProteinIdentification& proteins,
+                               ConsensusMap& cmap,
+                               Size use_top_psms,
+                               bool use_run_info);
+
+    IDBoostGraph(ProteinIdentification& proteins,
+                               ConsensusMap& cmap,
+                               Size use_top_psms,
+                               const ExperimentalDesign& ed);
+
+    /// Do sth on connected components (your functor object has to inherit from std::function or be a lambda)
     void applyFunctorOnCCs(std::function<unsigned long(Graph&)> functor);
+    /// Do sth on connected components single threaded (your functor object has to inherit from std::function or be a lambda)
     void applyFunctorOnCCsST(std::function<void(Graph&)> functor);
 
     /// Add intermediate nodes to the graph that represent indist. protein groups and peptides with the same parents
     /// this will save computation time and oscillations later on.
     void clusterIndistProteinsAndPeptides();
+
+    //TODO create a new class for an extended Graph and try to reuse as much as possible
+    // use inheritance or templates
     /// As above but adds charge, replicate and sequence layer of nodes (untested)
     void clusterIndistProteinsAndPeptidesAndExtendGraph();
 
@@ -316,10 +331,36 @@ namespace OpenMS
     /// IMPORTANT: Once the graph is built, editing members like (protein/peptide)_hits_ will invalidate it!
     /// @param protein ProteinIdentification object storing IDs and groups
     /// @param idedSpectra vector of ProteinIdentifications with links to the proteins and PSMs in its PeptideHits
-    /// @param use_all_psms If all or just the FIRST psm should be used
-    void buildGraph(Size use_top_psms);
-    void buildGraphWithRunInfo(Size use_top_psms, bool readstore_run_info = true);
+    /// @param use_top_psms Nr of top PSMs used per spectrum (<= 0 means all)
+    /// @todo we could include building the graph in important "main" functions like inferPosteriors
+    /// to make the methods safer, but it is also nice to be able to reuse the graph
+    void buildGraph(ProteinIdentification& proteins,
+                    std::vector<PeptideIdentification>& idedSpectra,
+                    Size use_top_psms);
 
+    void buildGraph(ProteinIdentification& proteins,
+                    ConsensusMap& cmap,
+                    Size use_top_psms);
+
+
+
+    /// Initialize and store the graph. Also stores run information to later group
+    /// peptides more efficiently.
+    /// IMPORTANT: Once the graph is built, editing members like (protein/peptide)_hits_ will invalidate it!
+    /// @param use_top_psms Nr of top PSMs used per spectrum (<= 0 means all)
+    /// @todo we could include building the graph in important "main" functions like inferPosteriors
+    /// to make the methods safer, but it is also nice to be able to reuse the graph
+    void buildGraphWithRunInfo(ProteinIdentification& proteins,
+                                             ConsensusMap& cmap,
+                                             Size use_top_psms,
+                                             const ExperimentalDesign& ed);
+
+    void buildGraphWithRunInfo(ProteinIdentification& proteins,
+                                             std::vector<PeptideIdentification>& idedSpectra,
+                                             Size use_top_psms,
+                                             const ExperimentalDesign& ed);
+
+    /// Zero means the graph was not split yet
     Size getNrConnectedComponents();
 
     //TODO docu
@@ -332,7 +373,7 @@ namespace OpenMS
 
     struct SequenceToReplicateChargeVariantHierarchy;
 
-    /// the initial boost Graph
+    /// the initial boost Graph (will be cleared when split into CCs)
     Graph g;
 
     /// the Graph split into connected components
@@ -343,24 +384,12 @@ namespace OpenMS
     std::vector<std::tuple<vertex_t, vertex_t, unsigned long, double>> sizes_and_times_{1};
     #endif
 
-    /// underlying protein identification object
-    //TODO for consensusXML this probably needs to become a vector.
-    ProteinIdentification& proteins_;
-    /// underlying peptide identifications
-    std::vector<PeptideIdentification>& idedSpectra_;
-    /// underlying experimental design, if not given it will be default constructed
-    //TODO think about using a pointer here instead of copying. But it's usually not too big
-    const ExperimentalDesign exp_design_;
-
     /// if a graph is built with run information, this will store the run, each peptide hit
     /// vertex belongs to. Important for extending the graph.
     //TODO think about preallocating it, but the number of peptide hits is not easily computed
     //since they are inside the pepIDs
     //TODO would multiple sets be better?
     std::unordered_map<vertex_t, Size> pepHitVtx_to_run_;
-
-    /// a visitor that creates labels based on the node type (e.g. for printing)
-    //LabelVisitor lv_; //currently created locally
 
     /// helper function to add a vertex if it is not present yet, otherwise return the present one
     /// needs a temporary filled vertex_map that is modifiable

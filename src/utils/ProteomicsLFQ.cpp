@@ -1279,8 +1279,8 @@ protected:
       }
       //should be okay if we filter the hits here. protein quantifier
       //uses the annotations in the consensusXML anyway
-      IDFilter::filterBestPerPeptide(inferred_peptide_ids, true, true, 1);
-      IDFilter::filterEmptyPeptideIDs(inferred_peptide_ids);
+      IDFilter::keepBestPerPeptide(inferred_peptide_ids, true, true, 1);
+      IDFilter::removeEmptyIdentifications(inferred_peptide_ids);
       BayesianProteinInferenceAlgorithm bayes;
       //bayesian inference automatically annotates groups but only non-singletons
       bayes.inferPosteriorProbabilities(inferred_protein_ids, inferred_peptide_ids);

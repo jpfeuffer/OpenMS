@@ -63,6 +63,7 @@ namespace OpenMS
     defaults_.setValue("conservative", "false", "If 'true' (D+1)/T instead of (D+1)/(T+D) is used as a formula.");
     defaults_.setValidStrings("conservative", ListUtils::create<String>("true,false"));
     defaultsToParam_();
+
   }
 
   void FalseDiscoveryRate::apply(vector<PeptideIdentification>& ids) const
@@ -131,7 +132,7 @@ namespace OpenMS
       {
         if (!treat_runs_separately && iit != identifiers.begin())
         {
-          continue; //only take the first run?
+          continue; //only take the first run
         }
 
 #ifdef FALSE_DISCOVERY_RATE_DEBUG
@@ -502,8 +503,6 @@ namespace OpenMS
       }
       it->setHits(new_hits);
     }
-
-    return;
   }
 
   void FalseDiscoveryRate::apply(vector<ProteinIdentification>& fwd_ids, vector<ProteinIdentification>& rev_ids) const
@@ -556,8 +555,6 @@ namespace OpenMS
       }
       it->setHits(hits);
     }
-
-    return;
   }
 
   void FalseDiscoveryRate::calculateFDRs_(Map<double, double>& score_to_fdr, vector<double>& target_scores, vector<double>& decoy_scores, bool q_value, bool higher_score_better) const
@@ -687,7 +684,7 @@ namespace OpenMS
       // corner cases
       if (k == 0)
       {
-        if (target_scores.size() != 0)
+        if (!target_scores.empty())
         {
           score_to_fdr[ds] = score_to_fdr[target_scores[0]];
           continue;
@@ -713,12 +710,20 @@ namespace OpenMS
   }
 
   //TODO does not support "by run" and/or "by charge"
+  //TODO could be done for a percentage of FalsePos instead of a number
+  //TODO can be templated for proteins
   double FalseDiscoveryRate::rocN(const vector<PeptideIdentification>& ids, Size fp_cutoff) const
   {
     bool higher_score_better(ids.begin()->isHigherScoreBetter());
     bool use_all_hits = param_.getValue("use_all_hits").toBool();
     std::vector<std::pair<double,bool>> scores_labels;
-    getScores_(scores_labels, ids, use_all_hits, 0, "");
+    getScores_(scores_labels, ids, use_all_hits);
+
+    if (scores_labels.empty())
+    {
+      throw Exception::MissingInformation(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION, "No scores could be extracted!");
+    }
+
     if (higher_score_better)
     { // decreasing
       std::sort(scores_labels.rbegin(), scores_labels.rend());
@@ -727,12 +732,79 @@ namespace OpenMS
     { // increasing
       std::sort(scores_labels.begin(), scores_labels.end());
     }
+    // if fp_cutoff is zero do the full AUC.
     return rocN_(scores_labels, fp_cutoff == 0 ? scores_labels.size() : fp_cutoff);
   }
 
-  //TODO iterate over a vector. to be consistent with old interface
+  //TODO implement per charge estimation
+  void FalseDiscoveryRate::applyBasic(ConsensusMap & cmap, bool groups, bool proteins, bool peptides)
+  {
+    bool q_value = !param_.getValue("no_qvalues").toBool();
+    const string& score_type = q_value ? "q-value" : "FDR";
+    bool all_hits = param_.getValue("use_all_hits").toBool();
+
+    bool treat_runs_separately = param_.getValue("treat_runs_separately").toBool();
+    bool split_charge_variants = param_.getValue("split_charge_variants").toBool();
+
+    //TODO this assumes all used search engine scores have the same score orientation
+    // include the determination of orientation in the getScores methods instead
+    bool higher_score_better = cmap.begin()->getPeptideIdentifications().begin()->isHigherScoreBetter();
+
+    if (peptides)
+    {
+      bool add_decoy_peptides = param_.getValue("add_decoy_peptides").toBool();
+      vector<pair<double,bool>> scores_labels;
+
+      //Warning: this assumes that there are no dangling identifier references in the PeptideIDs
+      // because this disables checking
+      if (cmap.getProteinIdentifications().size() == 1)
+      {
+        treat_runs_separately = false;
+      }
+
+      if (treat_runs_separately)
+      {
+        for (const auto& protID : cmap.getProteinIdentifications())
+        {
+          if (split_charge_variants)
+          {
+            pair<int, int> chargeRange = protID.getSearchParameters().getChargeRange();
+            for (int c = chargeRange.first; c <= chargeRange.second; ++c)
+            {
+              if (c == 0) continue;
+              getPeptideScoresFromMap_(scores_labels, cmap, all_hits, c, protID.getIdentifier());
+              map<double, double> scores_to_fdr;
+              calculateFDRBasic_(scores_to_fdr, scores_labels, q_value, higher_score_better);
+              setPeptideScoresForMap_(scores_to_fdr, cmap, score_type, higher_score_better, add_decoy_peptides, c,  protID.getIdentifier());
+            }
+          }
+          else
+          {
+            getPeptideScoresFromMap_(scores_labels, cmap, all_hits, protID.getIdentifier());
+            map<double, double> scores_to_fdr;
+            calculateFDRBasic_(scores_to_fdr, scores_labels, q_value, higher_score_better);
+            setPeptideScoresForMap_(scores_to_fdr, cmap, score_type, higher_score_better, add_decoy_peptides, protID.getIdentifier());
+          }
+        }
+      }
+      else
+      {
+        getPeptideScoresFromMap_(scores_labels, cmap, all_hits);
+        map<double, double> scores_to_fdr;
+        calculateFDRBasic_(scores_to_fdr, scores_labels, q_value, higher_score_better);
+        setPeptideScoresForMap_(scores_to_fdr, cmap, score_type, higher_score_better, add_decoy_peptides);
+      }
+    }
+
+    //TODO if proteins and if protein groups or split up the function
+  }
+
+  //TODO Add another overload that iterates over a vector. to be consistent with old interface
+  //TODO Make it return a double for the AUC
   void FalseDiscoveryRate::applyBasic(ProteinIdentification & id, bool groups_too)
   {
+    bool add_decoy_proteins = param_.getValue("add_decoy_proteins").toBool();
+
     bool q_value = !param_.getValue("no_qvalues").toBool();
     //TODO Check naming conventions. Ontology? Make class member?
     const string& score_type = q_value ? "q-value" : "FDR";
@@ -749,7 +821,21 @@ namespace OpenMS
     }
     calculateFDRBasic_(scores_to_FDR, scores_labels, q_value, higher_score_better);
     if (!scores_labels.empty())
-      setScores_(scores_to_FDR, id, score_type, false);
+    {
+      if (add_decoy_proteins)
+      {
+        setScores_(scores_to_FDR, id, score_type, higher_score_better, add_decoy_proteins);
+      }
+      else
+      {
+        setScores_(scores_to_FDR, id, score_type, higher_score_better);
+      }
+    }
+    else
+    {
+      LOG_WARN << "Warning: No scores could be extracted for proteins. No FDR calculation performed.";
+    }
+
     // TODO this could be a separate function.. And it could actually be sped up.
     //  We could store the number of decoys/targets in the group, or we only update the
     //  scores of proteins that are actually in groups (rest stays the same)
@@ -758,6 +844,7 @@ namespace OpenMS
       scores_to_FDR.clear();
       scores_labels.clear();
       scores_labels.reserve(id.getHits().size());
+      // Prepare lookup map for decoy proteins (since there is no direct way back from group to protein)
       unordered_set<string> decoy_accs;
       for (const auto& prot : id.getHits())
       {
@@ -815,6 +902,7 @@ namespace OpenMS
     }
   }
 
+  //TODO could be implemented for PeptideIDs, too
   //TODO iterate over the vector. to be consistent with old interface
   void FalseDiscoveryRate::applyEstimated(std::vector<ProteinIdentification> &ids) const
   {
@@ -845,6 +933,8 @@ namespace OpenMS
       setScores_(scores_to_FDR, ids[0], "Estimated Q-Values", false);
   }
 
+
+  //TODO remove?
   double FalseDiscoveryRate::applyEvaluateProteinIDs(const std::vector<ProteinIdentification>& ids, double pepCutoff, UInt fpCutoff, double diffWeight)
   {
     //TODO not yet supported (if ever)
@@ -882,7 +972,6 @@ namespace OpenMS
     // Then convex combination with the AUC.
     return (1.0 - diff) * (1.0 - diffWeight) + auc * diffWeight;
   }
-
 
   //TODO the following two methods assume sortedness. Add precondition and/or doxygen comment
   double FalseDiscoveryRate::diffEstimatedEmpirical_(const std::vector<std::pair<double, bool>>& scores_labels, double pepCutoff)
@@ -1003,6 +1092,7 @@ namespace OpenMS
 
 
   // Actually this does not need the bool entries in the scores_labels, but leads to less code
+  // Assumes P(E)Probabilities as scores
   void FalseDiscoveryRate::calculateEstimatedQVal_(std::map<double, double> &scores_to_FDR,
                                                    std::vector<std::pair<double, bool>> &scores_labels,
                                                    bool higher_score_better) const
@@ -1035,7 +1125,7 @@ namespace OpenMS
       estimatedFDR[j] = sum / (j+1.0);
     }
 
-    if (higher_score_better)
+    if (higher_score_better) // Transform to PEP
     {
       std::transform(estimatedFDR.begin(), estimatedFDR.end(), estimatedFDR.begin(), [&](double d) { return 1 - d; });
     }
@@ -1047,6 +1137,7 @@ namespace OpenMS
 
   void FalseDiscoveryRate::calculateFDRBasic_(std::map<double,double>& scores_to_FDR, std::vector<std::pair<double,bool>>& scores_labels, bool qvalue, bool higher_score_better)
   {
+    //TODO put in separate function to avoid ifs in iteration
     bool conservative = param_.getValue("conservative").toBool();
     if (scores_labels.empty())
     {
@@ -1109,92 +1200,6 @@ namespace OpenMS
     }
   }
 
-
-  void FalseDiscoveryRate::getScores_(
-    std::vector<std::pair<double,bool>>& scores_labels, 
-    const ProteinIdentification & id) const
-  {
-    checkTDAnnotation_(id);
-    scores_labels.reserve(scores_labels.size() + id.getHits().size());
-    std::transform(id.getHits().begin(), id.getHits().end(),
-                   std::back_inserter(scores_labels),
-                   [&](const ProteinHit& hit) { return std::make_pair<double,bool>(hit.getScore(), std::string(hit.getMetaValue("target_decoy"))[0] == 't'); });
-
-  }
-
-  void FalseDiscoveryRate::getScores_(
-    std::vector<std::pair<double,bool>>& scores_labels, 
-    const std::vector<PeptideIdentification> & ids, 
-    bool all_hits, 
-    int charge, 
-    String identifier) const
-  {
-
-    {
-      for (const PeptideIdentification& id : ids)
-      {
-        if (!identifier.empty() && identifier != id.getIdentifier()) continue;
-
-        if (all_hits)
-        {
-          for (const PeptideHit& hit : id.getHits())
-          {
-            if (charge == 0 || charge == hit.getCharge()) scores_labels.push_back(getScoreLabel_(hit, FalseDiscoveryRate::GetLabelFunctor<const PeptideHit&>()));
-          }
-        }
-        else
-        {
-          //TODO for speed I assume that they are sorted and first = best.
-          //id.sort();
-          if (charge == 0 || charge == id.getHits()[0].getCharge()) scores_labels.push_back(getScoreLabel_(id.getHits()[0], FalseDiscoveryRate::GetLabelFunctor<const PeptideHit&>()));
-        }
-      }
-    }
-  }
-
-  void FalseDiscoveryRate::getScores_(std::vector<std::pair<double,bool>>& scores_labels, const std::vector<PeptideIdentification> & targets, const std::vector<PeptideIdentification> & decoys, bool all_hits, int charge, const String& identifier) const
-  {
-
-    for (const PeptideIdentification& id : targets)
-    {
-      if (!identifier.empty() && identifier != id.getIdentifier()) continue;
-
-      if (all_hits)
-      {
-        for (const PeptideHit& hit : id.getHits())
-        {
-          if (charge == 0 || charge == hit.getCharge()) scores_labels.push_back(getScoreLabel_(hit, FalseDiscoveryRate::TrueFunctor<const PeptideHit&>()));
-        }
-      }
-      else
-      {
-        //TODO for speed I assume that they are sorted and first = best.
-        //id.sort();
-        if (charge == 0 || charge == id.getHits()[0].getCharge()) scores_labels.push_back(getScoreLabel_(id.getHits()[0], FalseDiscoveryRate::TrueFunctor<const PeptideHit&>()));
-      }
-    }
-
-    for (const PeptideIdentification& id : decoys)
-    {
-      if (!identifier.empty() && identifier != id.getIdentifier()) continue;
-
-      if (all_hits)
-      {
-        for (const PeptideHit& hit : id.getHits())
-        {
-          if (charge == 0 || charge == hit.getCharge()) scores_labels.push_back(getScoreLabel_(hit, FalseDiscoveryRate::FalseFunctor<const PeptideHit&>()));
-        }
-      }
-      else
-      {
-        //TODO for speed I assume that they are sorted.
-        //id.sort();
-        if (charge == 0 || charge == id.getHits()[0].getCharge()) scores_labels.push_back(getScoreLabel_(id.getHits()[0], FalseDiscoveryRate::FalseFunctor<const PeptideHit&>()));
-      }
-    }
-
-  }
-
   void FalseDiscoveryRate::getScores_(
       std::vector<std::pair<double,bool>>& scores_labels,
       const std::vector<ProteinIdentification::ProteinGroup>& grps,
@@ -1216,17 +1221,9 @@ namespace OpenMS
       scores_labels.emplace_back(score, target);
     }
   }
-  
-  void FalseDiscoveryRate::setScores_(const map<double,double>& scores_to_FDR, vector<PeptideIdentification> & ids, const string& score_type, bool higher_better) const
-  {
-    for (auto& id : ids)
-    {
-      setScores_(scores_to_FDR, id, score_type, higher_better);
-    }
-  }
 
-  // score_type and higher_better unused. You have to assume that groups will always have the same scores as the
-  // ProteinHits
+  // score_type and higher_better unused since ProteinGroups do not carry that information.
+  // You have to assume that groups will always have the same scores as the ProteinHits
   void FalseDiscoveryRate::setScores_(const map<double,double>& scores_to_FDR, vector<ProteinIdentification::ProteinGroup>& grps, const string& /*score_type*/, bool /*higher_better*/) const
   {
     for (auto& grp : grps)

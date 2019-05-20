@@ -705,4 +705,80 @@ namespace OpenMS
     return true;
   }
 
+  void ConsensusMap::applyFunctionOnPeptideHits(std::function<void(PeptideHit&)>& f)
+  {
+    for (auto& feat : *this)
+    {
+      applyFunctionOnPeptideHits_(feat.getPeptideIdentifications(), f);
+    }
+    applyFunctionOnPeptideHits_(this->getUnassignedPeptideIdentifications(), f);
+  }
+
+  void ConsensusMap::applyFunctionOnPeptideIDs(std::function<void(PeptideIdentification&)>& f)
+  {
+    for (auto& feat : *this)
+    {
+      applyFunctionOnPeptideIDs_(feat.getPeptideIdentifications(), f);
+    }
+    applyFunctionOnPeptideIDs_(this->getUnassignedPeptideIdentifications(), f);
+  }
+
+  void ConsensusMap::applyFunctionOnPeptideHits(std::function<void(const PeptideHit&)>& f) const
+  {
+    for (const auto& feat : *this)
+    {
+      applyFunctionOnPeptideHits_(feat.getPeptideIdentifications(), f);
+    }
+    applyFunctionOnPeptideHits_(this->getUnassignedPeptideIdentifications(), f);
+  }
+
+  void ConsensusMap::applyFunctionOnPeptideIDs(std::function<void(const PeptideIdentification&)>& f) const
+  {
+    for (const auto& feat : *this)
+    {
+      applyFunctionOnPeptideIDs_(feat.getPeptideIdentifications(), f);
+    }
+    applyFunctionOnPeptideIDs_(this->getUnassignedPeptideIdentifications(), f);
+  }
+
+
+  void ConsensusMap::applyFunctionOnPeptideIDs_(vector<PeptideIdentification>& idvec, std::function<void(PeptideIdentification&)>& f)
+  {
+    for (auto& id : idvec)
+    {
+      f(id);
+    }
+  }
+
+  void ConsensusMap::applyFunctionOnPeptideHits_(vector<PeptideIdentification>& idvec, std::function<void(PeptideHit&)>& f)
+  {
+    for (auto& id : idvec)
+    {
+      for (auto& hit : id.getHits())
+      {
+        f(hit);
+      }
+    }
+  }
+
+  void ConsensusMap::applyFunctionOnPeptideIDs_(const vector<PeptideIdentification>& idvec, std::function<void(const PeptideIdentification&)>& f) const
+  {
+    for (const auto& id : idvec)
+    {
+      f(id);
+    }
+  }
+
+  void ConsensusMap::applyFunctionOnPeptideHits_(const vector<PeptideIdentification>& idvec, std::function<void(const PeptideHit&)>& f) const
+  {
+    for (const auto& id : idvec)
+    {
+      for (const auto& hit : id.getHits())
+      {
+        f(hit);
+      }
+    }
+  }
+
+
 } // namespace OpenMS

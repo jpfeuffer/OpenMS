@@ -146,18 +146,6 @@ protected:
                        "Post-process inference output with greedy resolution of shared peptides based on the parent protein probabilities."
                        " Also adds the resolved ambiguity groups to output.", false, false);
     setValidStrings_("greedy_group_resolution", {"none","remove_associations_only","remove_proteins_wo_evidence"});
-    registerDoubleOption_("psm_probability_cutoff",
-                          "<option>",
-                          0.001,
-                          "Remove PSMs with probabilities less than or equal this cutoff", false, true);
-    registerDoubleOption_("min_psms_extreme_probability",
-                          "<option>",
-                          0.0,
-                          "Set PSMs with probability lower than this to this minimum probability.", false, true);
-    registerDoubleOption_("max_psms_extreme_probability",
-                          "<option>",
-                          1.0,
-                          "Set PSMs with probability higher than this to this maximum probability.", false, true);
 
 
     addEmptyLine_();
@@ -278,9 +266,9 @@ protected:
       mergedprots[0].getProteinGroups().clear();
     }
 
-    IDFilter::filterBestPerPeptide(mergedpeps, true, true, static_cast<unsigned int>(epifany_param.getValue("top_PSMs")));
+    IDFilter::keepBestPerPeptidePerRun(mergedprots, mergedpeps, true, true, static_cast<unsigned int>(epifany_param.getValue("top_PSMs")));
 
-    IDFilter::filterEmptyPeptideIDs(mergedpeps);
+    IDFilter::removeEmptyIdentifications(mergedpeps);
 
     convertPSMScores_(mergedpeps);
 
@@ -304,7 +292,7 @@ protected:
     {
       LOG_INFO << "Removing PSMs with probability < " << pre_filter << std::endl;
       IDFilter::filterHitsByScore(mergedpeps, pre_filter);
-      IDFilter::filterEmptyPeptideIDs(mergedpeps);
+      IDFilter::removeEmptyIdentifications(mergedpeps);
     }
 
     if (mergedpeps.empty())

@@ -50,6 +50,8 @@
 
 namespace OpenMS
 {
+  class PeptideIdentification;
+  class PeptideHit;
   class ProteinIdentification;
   class DataProcessing;
   namespace Logger
@@ -273,6 +275,14 @@ public:
     /// returns the MS run path (stored in ColumnHeaders)
     OPENMS_DLLAPI void getPrimaryMSRunPath(StringList& toFill) const;
 
+    OPENMS_DLLAPI void applyFunctionOnPeptideHits(std::function<void(PeptideHit&)>& f);
+
+    OPENMS_DLLAPI void applyFunctionOnPeptideIDs(std::function<void(PeptideIdentification&)>& f);
+
+    OPENMS_DLLAPI void applyFunctionOnPeptideHits(std::function<void(const PeptideHit&)>& f) const;
+
+    OPENMS_DLLAPI void applyFunctionOnPeptideIDs(std::function<void(const PeptideIdentification&)>& f) const;
+
     /// Equality operator
     OPENMS_DLLAPI bool operator==(const ConsensusMap& rhs) const;
 
@@ -347,10 +357,22 @@ protected:
 
     /// applied data processing
     std::vector<DataProcessing> data_processing_;
+
+private:
+
+    OPENMS_DLLAPI void applyFunctionOnPeptideIDs_(const std::vector<PeptideIdentification>& idvec, std::function<void(const PeptideIdentification&)>& f) const;
+
+    OPENMS_DLLAPI void applyFunctionOnPeptideHits_(const std::vector<PeptideIdentification>& idvec, std::function<void(const PeptideHit&)>& f) const;
+
+    OPENMS_DLLAPI void applyFunctionOnPeptideIDs_(std::vector<PeptideIdentification>& idvec, std::function<void(PeptideIdentification&)>& f);
+
+    OPENMS_DLLAPI void applyFunctionOnPeptideHits_(std::vector<PeptideIdentification>& idvec, std::function<void(PeptideHit&)>& f);
   };
 
   ///Print the contents of a ConsensusMap to a stream.
   OPENMS_DLLAPI std::ostream& operator<<(std::ostream& os, const ConsensusMap& cons_map);
+
+
 
 } // namespace OpenMS
 

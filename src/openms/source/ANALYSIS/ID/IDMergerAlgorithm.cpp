@@ -99,10 +99,10 @@ namespace OpenMS
     StringList newOrigins(fileOriginToIdx.size());
     for (auto& entry : fileOriginToIdx)
     {
-      newOrigins[entry.second] = std::move(entry.first);
+      newOrigins[entry.second] = entry.first;
     }
     // currently setPrimaryMSRunPath does not support move (const ref)
-    protResult.setPrimaryMSRunPath(std::move(newOrigins));
+    protResult.setPrimaryMSRunPath(newOrigins);
     std::swap(prots, protResult);
     std::swap(peps, pepResult);
     //reset so the new result is usable right away

@@ -716,8 +716,84 @@ namespace OpenMS
   {
     bool higher_score_better(ids.begin()->isHigherScoreBetter());
     bool use_all_hits = param_.getValue("use_all_hits").toBool();
+
     std::vector<std::pair<double,bool>> scores_labels;
     getScores_(scores_labels, ids, use_all_hits);
+
+    if (scores_labels.empty())
+    {
+      throw Exception::MissingInformation(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION, "No scores could be extracted!");
+    }
+
+    if (higher_score_better)
+    { // decreasing
+      std::sort(scores_labels.rbegin(), scores_labels.rend());
+    }
+    else
+    { // increasing
+      std::sort(scores_labels.begin(), scores_labels.end());
+    }
+    // if fp_cutoff is zero do the full AUC.
+    return rocN_(scores_labels, fp_cutoff == 0 ? scores_labels.size() : fp_cutoff);
+  }
+
+  double FalseDiscoveryRate::rocN(const vector<PeptideIdentification>& ids, Size fp_cutoff, const String& identifier) const
+  {
+    bool higher_score_better(ids.begin()->isHigherScoreBetter());
+    bool use_all_hits = param_.getValue("use_all_hits").toBool();
+
+    std::vector<std::pair<double,bool>> scores_labels;
+    getScores_(scores_labels, ids, use_all_hits, identifier);
+
+    if (scores_labels.empty())
+    {
+      throw Exception::MissingInformation(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION, "No scores could be extracted!");
+    }
+
+    if (higher_score_better)
+    { // decreasing
+      std::sort(scores_labels.rbegin(), scores_labels.rend());
+    }
+    else
+    { // increasing
+      std::sort(scores_labels.begin(), scores_labels.end());
+    }
+    // if fp_cutoff is zero do the full AUC.
+    return rocN_(scores_labels, fp_cutoff == 0 ? scores_labels.size() : fp_cutoff);
+  }
+
+  double FalseDiscoveryRate::rocN(const ConsensusMap& ids, Size fp_cutoff) const
+  {
+    bool higher_score_better(ids[0].getPeptideIdentifications().begin()->isHigherScoreBetter());
+    bool use_all_hits = param_.getValue("use_all_hits").toBool();
+
+    std::vector<std::pair<double,bool>> scores_labels;
+    getPeptideScoresFromMap_(scores_labels, ids, use_all_hits);
+
+    if (scores_labels.empty())
+    {
+      throw Exception::MissingInformation(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION, "No scores could be extracted!");
+    }
+
+    if (higher_score_better)
+    { // decreasing
+      std::sort(scores_labels.rbegin(), scores_labels.rend());
+    }
+    else
+    { // increasing
+      std::sort(scores_labels.begin(), scores_labels.end());
+    }
+    // if fp_cutoff is zero do the full AUC.
+    return rocN_(scores_labels, fp_cutoff == 0 ? scores_labels.size() : fp_cutoff);
+  }
+
+  double FalseDiscoveryRate::rocN(const ConsensusMap& ids, Size fp_cutoff, const String& identifier) const
+  {
+    bool higher_score_better(ids[0].getPeptideIdentifications().begin()->isHigherScoreBetter());
+    bool use_all_hits = param_.getValue("use_all_hits").toBool();
+
+    std::vector<std::pair<double,bool>> scores_labels;
+    getPeptideScoresFromMap_(scores_labels, ids, use_all_hits, identifier);
 
     if (scores_labels.empty())
     {

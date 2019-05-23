@@ -39,15 +39,17 @@
 #include <OpenMS/ANALYSIS/ID/MessagePasserFactory.h>
 #include <OpenMS/DATASTRUCTURES/DefaultParamHandler.h>
 #include <OpenMS/CONCEPT/ProgressLogger.h>
-#include <OpenMS/METADATA/ExperimentalDesign.h>
-#include <OpenMS/METADATA/PeptideIdentification.h>
-#include <OpenMS/METADATA/ProteinIdentification.h>
 #include <OpenMS/MATH/MISC/GridSearch.h>
 #include <vector>
 #include <functional>
 
 namespace OpenMS
 {
+  class ConsensusMap;
+  class IDBoostGraph;
+  class PeptideIdentification;
+  class ProteinIdentification;
+
   class OPENMS_DLLAPI BayesianProteinInferenceAlgorithm :
       public DefaultParamHandler,
       public ProgressLogger
@@ -84,14 +86,13 @@ namespace OpenMS
 
   private:
 
-    //TODO follow naming convention _
-    void applyFunctionOnPeptideHits(std::vector<PeptideIdentification>& idvec, std::function<void(PeptideHit&)>& f);
-    void applyFunctionOnPeptideHits(ConsensusMap& idvec, std::function<void(PeptideHit&)>& f);
+    void inferPosteriorProbabilities_(IDBoostGraph& ibg);
 
-    void applyFunctionOnPeptideIDs(std::vector<PeptideIdentification>& idvec, std::function<void(PeptideIdentification&)>& f);
-    void applyFunctionOnPeptideIDs(ConsensusMap& idvec, std::function<void(PeptideIdentification&)>& f);
-
-    GridSearch<double,double,double> initGridSearchFromParams_();
+    GridSearch<double,double,double> initGridSearchFromParams_(
+        std::vector<double>& alpha_search,
+        std::vector<double>& beta_search,
+        std::vector<double>& gamma_search
+        );
 
     std::function<void(PeptideIdentification&)> checkConvertAndFilterPepHits;
 

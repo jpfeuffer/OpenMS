@@ -68,7 +68,6 @@ namespace OpenMS
         }
   };
 
-  //TODO move to cpp file
   struct IDBoostGraph::SequenceToReplicateChargeVariantHierarchy
   {
     //TODO only add the intermediate nodes if there are more than one "splits"
@@ -146,51 +145,57 @@ namespace OpenMS
   IDBoostGraph::IDBoostGraph(ProteinIdentification& proteins,
                              std::vector<PeptideIdentification>& idedSpectra,
                              Size use_top_psms,
-                             bool use_run_info)
+                             bool use_run_info):
+      protIDs_(proteins)
   {
     if (use_run_info)
     {
-      buildGraphWithRunInfo(proteins, idedSpectra, use_top_psms, ExperimentalDesign::fromIdentifications({proteins}));
+      buildGraphWithRunInfo_(proteins, idedSpectra, use_top_psms, ExperimentalDesign::fromIdentifications({proteins}));
     }
     else
     {
-      buildGraph(proteins, idedSpectra, use_top_psms);
+      buildGraph_(proteins, idedSpectra, use_top_psms);
     }
   }
 
   IDBoostGraph::IDBoostGraph(ProteinIdentification& proteins,
                              std::vector<PeptideIdentification>& idedSpectra,
                              Size use_top_psms,
-                             const ExperimentalDesign& ed)
+                             const ExperimentalDesign& ed):
+      protIDs_(proteins)
   {
-      buildGraphWithRunInfo(proteins, idedSpectra, use_top_psms, ed);
+      buildGraphWithRunInfo_(proteins, idedSpectra, use_top_psms, ed);
   }
 
   IDBoostGraph::IDBoostGraph(ProteinIdentification& proteins,
                              ConsensusMap& cmap,
                              Size use_top_psms,
-                             bool use_run_info)
+                             bool use_run_info):
+      protIDs_(proteins)
   {
     if (use_run_info)
     {
-      buildGraphWithRunInfo(proteins, cmap, use_top_psms, ExperimentalDesign::fromConsensusMap(cmap));
+      buildGraphWithRunInfo_(proteins, cmap, use_top_psms, ExperimentalDesign::fromConsensusMap(cmap));
     }
     else
     {
-      buildGraph(proteins, cmap, use_top_psms);
+      buildGraph_(proteins, cmap, use_top_psms);
     }
   }
 
   IDBoostGraph::IDBoostGraph(ProteinIdentification& proteins,
                              ConsensusMap& cmap,
                              Size use_top_psms,
-                             const ExperimentalDesign& ed)
+                             const ExperimentalDesign& ed):
+      protIDs_(proteins)
   {
-      buildGraphWithRunInfo(proteins, cmap, use_top_psms, ed);
+      buildGraphWithRunInfo_(proteins, cmap, use_top_psms, ed);
   }
 
 
-  unordered_map<unsigned, unsigned> convertMapLabelFree(const map<pair<String, unsigned>, unsigned>& fileToRun, const StringList& files)
+  unordered_map<unsigned, unsigned> convertMapLabelFree(
+      const map<pair<String, unsigned>, unsigned>& fileToRun,
+      const StringList& files)
   {
     unordered_map<unsigned, unsigned> indexToRun;
     unsigned i = 0;
@@ -204,25 +209,27 @@ namespace OpenMS
 
   unordered_map<unsigned, unsigned> convertMap(
       const map<pair<String, unsigned>, unsigned>& fileLabToPrefractionationGroup,
-      const ConsensusMap::ColumnHeaders& idxToFileLabMappings)
+      const ConsensusMap::ColumnHeaders& idxToFileLabMappings,
+      const String& experiment_type)
   {
     unordered_map<unsigned, unsigned> indexToRun;
     for (const auto& mapping : idxToFileLabMappings)
     {
-      indexToRun[mapping.first] = fileLabToPrefractionationGroup.at(make_pair<String,unsigned>(mapping.second.filename, mapping.second.label));
+      indexToRun[mapping.first] =
+          fileLabToPrefractionationGroup.at(make_pair(mapping.second.filename, mapping.second.getLabelAsUInt(experiment_type)));
     } // TODO what if file is not in the experimental design? Check in the very beginning!?
     return indexToRun;
   }
 
   //TODO actually to build the graph, the inputs could be passed const. But if you want to do sth
   // on the graph later it needs to be non-const.
-  void IDBoostGraph::buildGraphWithRunInfo(ProteinIdentification& proteins,
+  void IDBoostGraph::buildGraphWithRunInfo_(ProteinIdentification& proteins,
                                            ConsensusMap& cmap,
                                            Size use_top_psms,
                                            const ExperimentalDesign& ed)
   {
     unordered_map<unsigned, unsigned> indexToPrefractionationGroup;
-    Size nrPrefractionationGroups = 1;
+    Size nrPrefractionationGroups;
 
     {
       // TODO check that the files in the ProteinID run are all in the Exp. Design
@@ -232,7 +239,7 @@ namespace OpenMS
       //TODO use exp. design to merge fractions
       map<pair<String, unsigned>, unsigned> fileLabelToPrefractionationGroup = ed.getPathLabelToPrefractionationMapping(false);
       nrPrefractionationGroups = fileLabelToPrefractionationGroup.size();
-      indexToPrefractionationGroup = convertMapLabelFree(fileLabelToPrefractionationGroup, colHeaders); // convert to index in the peptide ids
+      indexToPrefractionationGroup = convertMap(fileLabelToPrefractionationGroup, colHeaders, cmap.getExperimentType()); // convert to index in the peptide ids
     }
 
     //TODO is this vertex_map really necessary. I think PSMs are always unique in our datastructures and could be
@@ -316,19 +323,18 @@ namespace OpenMS
 
   //TODO actually to build the graph, the inputs could be passed const. But if you want to do sth
   //on the graph later it needs to be non-const. Overload this function or somehow make sure it can be used const.
-  void IDBoostGraph::buildGraphWithRunInfo(ProteinIdentification& proteins,
+  void IDBoostGraph::buildGraphWithRunInfo_(ProteinIdentification& proteins,
                                            std::vector<PeptideIdentification>& idedSpectra,
                                            Size use_top_psms,
                                            const ExperimentalDesign& ed)
   {
     unordered_map<unsigned, unsigned> indexToPrefractionationGroup;
-    Size nrPrefractionationGroups = 1;
 
     {
       StringList files;
       proteins.getPrimaryMSRunPath(files);
       map<pair<String, unsigned>, unsigned> fileLabelToPrefractionationGroup = ed.getPathLabelToPrefractionationMapping(false);
-      nrPrefractionationGroups = fileLabelToPrefractionationGroup.size();
+      nrPrefractionationGroups_ = fileLabelToPrefractionationGroup.size();
       indexToPrefractionationGroup = convertMapLabelFree(fileLabelToPrefractionationGroup, files); // convert to index in the peptide ids
     }
 
@@ -409,13 +415,12 @@ namespace OpenMS
 
   //TODO actually to build the graph, the inputs could be passed const. But if you want to do sth
   //on the graph later it needs to be non-const. Overload this function or somehow make sure it can be used const.
-  void IDBoostGraph::buildGraph(ProteinIdentification& proteins,
+  void IDBoostGraph::buildGraph_(ProteinIdentification& proteins,
                                 std::vector<PeptideIdentification>& idedSpectra,
                                 Size use_top_psms)
   {
     StringList runs;
     proteins.getPrimaryMSRunPath(runs);
-    //TODO add support for (consensus) feature information
 
     unordered_map<IDPointer, vertex_t, boost::hash<IDPointer>> vertex_map{};
 
@@ -573,7 +578,7 @@ namespace OpenMS
 
 
   /// Do sth on ccs
-  void IDBoostGraph::applyFunctorOnCCs(std::function<unsigned long(Graph&)> functor)
+  void IDBoostGraph::applyFunctorOnCCs(std::function<unsigned long(Graph&)>& functor)
   {
     if (ccs_.empty()) {
       throw Exception::MissingInformation(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION, "No connected components annotated. Run computeConnectedComponents first!");
@@ -622,7 +627,7 @@ namespace OpenMS
   }
 
   /// Do sth on ccs single-threaded
-  void IDBoostGraph::applyFunctorOnCCsST(std::function<void(Graph&)> functor)
+  void IDBoostGraph::applyFunctorOnCCsST(std::function<void(Graph&)>& functor)
   {
     if (ccs_.empty()) {
       throw Exception::MissingInformation(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION, "No connected components annotated. Run computeConnectedComponents first!");
@@ -636,10 +641,6 @@ namespace OpenMS
       #endif
 
       Graph& curr_cc = ccs_.at(i);
-
-      #ifdef INFERENCE_MT_DEBUG
-      LOG_INFO << "Processing on thread# " << omp_get_thread_num() << std::endl;
-      #endif
 
       #ifdef INFERENCE_DEBUG
       LOG_INFO << "Processing cc " << i << " with " << boost::num_vertices(curr_cc) << " vertices." << std::endl;
@@ -668,7 +669,7 @@ namespace OpenMS
     #endif
   }
 
-  void IDBoostGraph::annotateIndistProteins(bool addSingletons) const
+  void IDBoostGraph::annotateIndistProteins(bool addSingletons)
   {
     if (ccs_.empty() && boost::num_vertices(g) == 0)
     {
@@ -711,16 +712,58 @@ namespace OpenMS
     }
   }
 
-  //TODO think about going back to members. Such that the Graph stores on which
-  // objects it was built upon. Otherwise it could happen that you put a different one here.
-  void IDBoostGraph::annotateIndistProteins_(const Graph& fg, bool addSingletons, ProteinIdentification& proteins) const
+  void IDBoostGraph::calculateAndAnnotateIndistProteins(bool addSingletons)
+  {
+    if (ccs_.empty() && boost::num_vertices(g) == 0)
+    {
+      throw Exception::MissingInformation(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION, "Graph empty. Build it first.");
+    }
+
+    ProgressLogger pl;
+    pl.setLogType(ProgressLogger::CMD);
+
+    if (ccs_.empty())
+    {
+      pl.startProgress(0, 1, "Annotating indistinguishable proteins...");
+      annotateIndistProteins_(g, addSingletons);
+      pl.nextProgress();
+      pl.endProgress();
+    }
+    else
+    {
+      pl.startProgress(0, ccs_.size(), "Annotating indistinguishable proteins...");
+      #pragma omp parallel for
+      for (int i = 0; i < static_cast<int>(ccs_.size()); i += 1)
+      {
+        const Graph& curr_cc = ccs_.at(i);
+
+        #ifdef INFERENCE_MT_DEBUG
+        LOG_INFO << "Processing on thread# " << omp_get_thread_num() << std::endl;
+        #endif
+
+        #ifdef INFERENCE_DEBUG
+        LOG_INFO << "Processing cc " << i << " with " << boost::num_vertices(curr_cc) << " vertices." << std::endl;
+        LOG_INFO << "Printing cc " << i << std::endl;
+        printGraph(LOG_INFO, curr_cc);
+        LOG_INFO << "Printed cc " << i << std::endl;
+        #endif
+
+        calculateAndAnnotateIndistProteins_(curr_cc, addSingletons);
+        pl.setProgress(i);
+      }
+      pl.endProgress();
+    }
+  }
+
+  void IDBoostGraph::calculateAndAnnotateIndistProteins_(const Graph& fg, bool addSingletons)
   {
     //TODO evaluate hashing performance on sets
-    unordered_map<PeptideNodeSet, ProteinNodeSet, MyUIntSetHasher > indistProteins; //find indist proteins
+    unordered_map<PeptideNodeSet, ProteinNodeSet, MyUIntSetHasher> indistProteins; //find indist proteins
 
     Graph::vertex_iterator ui, ui_end;
     boost::tie(ui, ui_end) = boost::vertices(fg);
 
+    //TODO refactor into function
     // Cluster proteins
     for (; ui != ui_end; ++ui)
     {
@@ -786,7 +829,42 @@ namespace OpenMS
       //  then you do not need a critical section. Resize afterwards.
       //  Or make a local vector of Groups and merge in a single threaded section
       #pragma omp critical (ProteinGroups)
-      {proteins.getIndistinguishableProteins().push_back(pg);};
+      {protIDs_.getIndistinguishableProteins().push_back(pg);}
+    }
+  }
+
+  void IDBoostGraph::annotateIndistProteins_(const Graph& fg, bool addSingletons)
+  {
+    Graph::vertex_iterator ui, ui_end;
+    boost::tie(ui,ui_end) = boost::vertices(fg);
+
+    for (; ui != ui_end; ++ui)
+    {
+      if (fg[*ui].which() == 1) //prot group
+      {
+        ProteinIdentification::ProteinGroup pg{};
+        pg.probability = (double) boost::get<IDBoostGraph::ProteinGroup>(fg[*ui]); //init
+        Graph::adjacency_iterator nbIt, nbIt_end;
+        boost::tie(nbIt, nbIt_end) = boost::adjacent_vertices(*ui, fg);
+
+        ProteinHit *proteinPtr = nullptr;
+        for (; nbIt != nbIt_end; ++nbIt)
+        {
+          if (fg[*nbIt].which() == 0) //neighboring proteins
+          {
+            proteinPtr = boost::get<ProteinHit*>(fg[*nbIt]);
+            pg.accessions.push_back(proteinPtr->getAccession());
+          }
+        }
+        if (addSingletons || pg.accessions.size() > 1)
+        {
+          // TODO you could allocate as many groups as proteins in the beginning
+          //  then you do not need a critical section. Resize afterwards.
+          //  Or make a local vector of Groups and merge in a single threaded section
+          #pragma omp critical (ProteinGroups)
+          {protIDs_.getIndistinguishableProteins().push_back(pg);}
+        }
+      }
     }
   }
 
@@ -962,18 +1040,20 @@ namespace OpenMS
   //needs run info annotated.
   //TODO new idea! Create GraphExtendedType. Every CC can be a different kind of graph then
   // and different functions work on different types or all types by templates
-  void IDBoostGraph::clusterIndistProteinsAndPeptidesAndExtendGraph(ProteinIdentification& proteins_)
+  void IDBoostGraph::clusterIndistProteinsAndPeptidesAndExtendGraph()
   {
 
+    //TODO save this number during building!
     Size nrReplicates = 1;
+
     if (!pepHitVtx_to_run_.empty()) //graph built with run info
     {
       StringList runs;
-      proteins_.getPrimaryMSRunPath(runs);
+      protIDs_.getPrimaryMSRunPath(runs);
       nrReplicates = runs.size();
     }
 
-    pair<int,int> chargeRange = proteins_.getSearchParameters().getChargeRange();
+    pair<int,int> chargeRange = protIDs_.getSearchParameters().getChargeRange();
 
     if (ccs_.empty()) {
       throw Exception::MissingInformation(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION, "No connected components annotated. Run computeConnectedComponents first!");

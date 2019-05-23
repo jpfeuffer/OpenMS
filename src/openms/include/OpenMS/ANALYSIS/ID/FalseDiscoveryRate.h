@@ -128,6 +128,18 @@ public:
     /// if fp_cutoff = 0, it will calculate the full AUC
     double rocN(const std::vector<PeptideIdentification>& ids, Size fp_cutoff) const;
 
+    /// calculates the auc until the first fp_cutoff False positive pep IDs (currently only takes all runs together)
+    /// if fp_cutoff = 0, it will calculate the full AUC. Restricted to IDs from a specific ID run.
+    double rocN(const std::vector<PeptideIdentification>& ids, Size fp_cutoff, const String& identifier) const;
+
+    /// calculates the auc until the first fp_cutoff False positive pep IDs (currently only takes all runs together)
+    /// if fp_cutoff = 0, it will calculate the full AUC
+    double rocN(const ConsensusMap& ids, Size fp_cutoff) const;
+
+    /// calculates the auc until the first fp_cutoff False positive pep IDs (currently only takes all runs together)
+    /// if fp_cutoff = 0, it will calculate the full AUC. Restricted to IDs from a specific ID run.
+    double rocN(const ConsensusMap& ids, Size fp_cutoff, const String& identifier) const;
+
 
 private:
 

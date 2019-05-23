@@ -129,6 +129,22 @@ public:
       Size size;
       /// Unique id of the file
       UInt64 unique_id;
+
+      unsigned getLabelAsUInt(const String& experiment_type) const
+      {
+        if (metaValueExists("channel_id"))
+        {
+          return static_cast<unsigned int>(getMetaValue("channel_id")) + 1;
+        }
+        else
+        {
+          if (experiment_type != "label-free")
+          {
+            LOG_WARN << "No channel id annotated in consensusXML. Assuming one channel." << std::endl;
+          }
+          return 1;
+        }
+      }
     };
 
     ///@name Type definitions

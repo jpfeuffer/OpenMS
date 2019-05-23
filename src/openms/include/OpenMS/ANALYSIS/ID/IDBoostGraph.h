@@ -306,9 +306,9 @@ namespace OpenMS
                                const ExperimentalDesign& ed);
 
     /// Do sth on connected components (your functor object has to inherit from std::function or be a lambda)
-    void applyFunctorOnCCs(std::function<unsigned long(Graph&)> functor);
+    void applyFunctorOnCCs(std::function<unsigned long(Graph&)>& functor);
     /// Do sth on connected components single threaded (your functor object has to inherit from std::function or be a lambda)
-    void applyFunctorOnCCsST(std::function<void(Graph&)> functor);
+    void applyFunctorOnCCsST(std::function<void(Graph&)>& functor);
 
     /// Add intermediate nodes to the graph that represent indist. protein groups and peptides with the same parents
     /// this will save computation time and oscillations later on.
@@ -316,49 +316,26 @@ namespace OpenMS
 
     //TODO create a new class for an extended Graph and try to reuse as much as possible
     // use inheritance or templates
-    /// As above but adds charge, replicate and sequence layer of nodes (untested)
+    /// (under development) As above but adds charge, replicate and sequence layer of nodes (untested)
     void clusterIndistProteinsAndPeptidesAndExtendGraph();
+
+    /// Annotate indistinguishable proteins by adding the groups to the underlying
+    /// ProteinIdentification::ProteinGroups object.
+    /// This has no effect on the graph itself.
+    /// @pre Graph must contain ProteinGroup nodes (e.g. with clusterIndistProteinsAndPeptides).
+    /// Otherwise it does nothing and you should use calculateAndAnnotateIndistProteins instead.
+    /// @param addSingletons if you want to annotate groups with just one protein entry
+    void annotateIndistProteins(bool addSingletons = true);
 
     /// Annotate indistinguishable proteins by adding the groups to the underlying
     /// ProteinIdentification::ProteinGroups object. This has no effect on the graph itself.
     /// @param addSingletons if you want to annotate groups with just one protein entry
-    void annotateIndistProteins(bool addSingletons = true) const;
+    void calculateAndAnnotateIndistProteins(bool addSingletons = true);
 
     /// Splits the initialized graph into connected components and clears it.
     void computeConnectedComponents();
 
-    /// Initialize and store the graph
-    /// IMPORTANT: Once the graph is built, editing members like (protein/peptide)_hits_ will invalidate it!
-    /// @param protein ProteinIdentification object storing IDs and groups
-    /// @param idedSpectra vector of ProteinIdentifications with links to the proteins and PSMs in its PeptideHits
-    /// @param use_top_psms Nr of top PSMs used per spectrum (<= 0 means all)
-    /// @todo we could include building the graph in important "main" functions like inferPosteriors
-    /// to make the methods safer, but it is also nice to be able to reuse the graph
-    void buildGraph(ProteinIdentification& proteins,
-                    std::vector<PeptideIdentification>& idedSpectra,
-                    Size use_top_psms);
 
-    void buildGraph(ProteinIdentification& proteins,
-                    ConsensusMap& cmap,
-                    Size use_top_psms);
-
-
-
-    /// Initialize and store the graph. Also stores run information to later group
-    /// peptides more efficiently.
-    /// IMPORTANT: Once the graph is built, editing members like (protein/peptide)_hits_ will invalidate it!
-    /// @param use_top_psms Nr of top PSMs used per spectrum (<= 0 means all)
-    /// @todo we could include building the graph in important "main" functions like inferPosteriors
-    /// to make the methods safer, but it is also nice to be able to reuse the graph
-    void buildGraphWithRunInfo(ProteinIdentification& proteins,
-                                             ConsensusMap& cmap,
-                                             Size use_top_psms,
-                                             const ExperimentalDesign& ed);
-
-    void buildGraphWithRunInfo(ProteinIdentification& proteins,
-                                             std::vector<PeptideIdentification>& idedSpectra,
-                                             Size use_top_psms,
-                                             const ExperimentalDesign& ed);
 
     /// Zero means the graph was not split yet
     Size getNrConnectedComponents();
@@ -371,25 +348,58 @@ namespace OpenMS
 
   private:
 
+    ProteinIdentification& protIDs_;
+
     struct SequenceToReplicateChargeVariantHierarchy;
 
+
+    //TODO introduce class hierarchy:
+    /*
+     * IDGraph<UnderlyingIDStruc>
+     *
+     * - BasicGraph<>
+     * - ExtendedGraphClustered<>
+     * - ExtendedGraphClusteredWithRunInfo<>
+     *
+     * in theory extending a basic one is desirable to create the extended one. But it means we have to
+     * copy/move the graph (node by node) because the nodes are of a broader boost::variant type. So we probably have to
+     * duplicate code and offer a from-scratch step-wise building for the extended graph, too.
+     * Note that there could be several levels of extension in the future. For now I keep everything in one
+     * class by having potential storage for the broadest extended type. Differences in the underlying ID structure
+     * e.g. ConsensusMap or PeptideIDs from idXML currently only have an effect during building, so I just overload
+     * the constructors. In theory it would be nice to generalize on that, too, especially when we adapt to the new
+     * ID data structure.
+     */
+
+
+    /* ----------------  Either of them is used --------------- */
     /// the initial boost Graph (will be cleared when split into CCs)
     Graph g;
 
     /// the Graph split into connected components
     Graphs ccs_;
+    /* -------------------------------------------------------- */
 
     #ifdef INFERENCE_BENCH
     /// nrnodes, nredges, nrmessages and times of last functor execution per connected component
     std::vector<std::tuple<vertex_t, vertex_t, unsigned long, double>> sizes_and_times_{1};
     #endif
 
+
+    /* ----  Only used when run information was available --------- */
+
+    //TODO think about preallocating it, but the number of peptide hits is not easily computed
+    // since they are inside the pepIDs
+
+    //TODO would multiple sets be better?
+
     /// if a graph is built with run information, this will store the run, each peptide hit
     /// vertex belongs to. Important for extending the graph.
-    //TODO think about preallocating it, but the number of peptide hits is not easily computed
-    //since they are inside the pepIDs
-    //TODO would multiple sets be better?
     std::unordered_map<vertex_t, Size> pepHitVtx_to_run_;
+    Size nrPrefractionationGroups_;
+
+    /* ----------------------------------------------------------- */
+
 
     /// helper function to add a vertex if it is not present yet, otherwise return the present one
     /// needs a temporary filled vertex_map that is modifiable
@@ -398,8 +408,41 @@ namespace OpenMS
 
 
     /// internal function to annotate the underlying ID structures based on the given Graph
-    void annotateIndistProteins_(const Graph& fg, bool addSingletons) const;
+    void annotateIndistProteins_(const Graph& fg, bool addSingletons);
+    void calculateAndAnnotateIndistProteins_(const Graph& fg, bool addSingletons);
 
+    /// Initialize and store the graph
+    /// IMPORTANT: Once the graph is built, editing members like (protein/peptide)_hits_ will invalidate it!
+    /// @param protein ProteinIdentification object storing IDs and groups
+    /// @param idedSpectra vector of ProteinIdentifications with links to the proteins and PSMs in its PeptideHits
+    /// @param use_top_psms Nr of top PSMs used per spectrum (<= 0 means all)
+    /// @todo we could include building the graph in important "main" functions like inferPosteriors
+    /// to make the methods safer, but it is also nice to be able to reuse the graph
+    void buildGraph_(ProteinIdentification& proteins,
+                    std::vector<PeptideIdentification>& idedSpectra,
+                    Size use_top_psms);
+
+    void buildGraph_(ProteinIdentification& proteins,
+                    ConsensusMap& cmap,
+                    Size use_top_psms);
+
+
+
+    /// Initialize and store the graph. Also stores run information to later group
+    /// peptides more efficiently.
+    /// IMPORTANT: Once the graph is built, editing members like (protein/peptide)_hits_ will invalidate it!
+    /// @param use_top_psms Nr of top PSMs used per spectrum (<= 0 means all)
+    /// @todo we could include building the graph in important "main" functions like inferPosteriors
+    /// to make the methods safer, but it is also nice to be able to reuse the graph
+    void buildGraphWithRunInfo_(ProteinIdentification& proteins,
+                               ConsensusMap& cmap,
+                               Size use_top_psms,
+                               const ExperimentalDesign& ed);
+
+    void buildGraphWithRunInfo_(ProteinIdentification& proteins,
+                               std::vector<PeptideIdentification>& idedSpectra,
+                               Size use_top_psms,
+                               const ExperimentalDesign& ed);
   };
 
 } //namespace OpenMS

@@ -34,6 +34,9 @@
 #include <OpenMS/ANALYSIS/ID/BayesianProteinInferenceAlgorithm.h>
 #include <OpenMS/ANALYSIS/ID/FalseDiscoveryRate.h>
 #include <OpenMS/ANALYSIS/ID/IDBoostGraph.h>
+#include <OpenMS/METADATA/PeptideIdentification.h>
+#include <OpenMS/METADATA/ProteinIdentification.h>
+#include <OpenMS/METADATA/ExperimentalDesign.h>
 #include <OpenMS/CHEMISTRY/EnzymaticDigestion.h>
 #include <OpenMS/DATASTRUCTURES/FASTAContainer.h>
 #include <OpenMS/FORMAT/IdXMLFile.h>
@@ -52,11 +55,8 @@ namespace OpenMS
   class BayesianProteinInferenceAlgorithm::AnnotateIndistGroupsFunctor :
       public std::function<void(IDBoostGraph::Graph&)>
   {
-  private:
-    ProteinIdentification& prots;
   public:
-    explicit AnnotateIndistGroupsFunctor(ProteinIdentification& proteinIDToAnnotateGroups):
-    prots(proteinIDToAnnotateGroups)
+    explicit AnnotateIndistGroupsFunctor():
     {}
 
     void operator() (IDBoostGraph::Graph& fg) {
@@ -701,55 +701,133 @@ namespace OpenMS
   void BayesianProteinInferenceAlgorithm::inferPosteriorProbabilities(ConsensusMap& cmap)
   {
     cmap.applyFunctionOnPeptideIDs(checkConvertAndFilterPepHits);
+    bool user_defined_priors = param_.getValue("user_defined_priors").toBool();
 
-    for (auto& proteinID : cmap.getProteinIdentifications())
+    FalseDiscoveryRate pepFDR;
+    Param p = pepFDR.getParameters();
+
+    // I think it is best to always use the best PSM only for comparing PSM FDR before-after
+    // since inference might change the ranking.
+    p.setValue("use_all_hits", "false");
+    pepFDR.setParameters(p);
+
+    vector<ProteinIdentification>& proteinIDs = cmap.getProteinIdentifications();
+    if (proteinIDs.size() == 1)
     {
       // Save current scores as priors if requested
-      bool user_defined_priors = param_.getValue("user_defined_priors").toBool();
       if (user_defined_priors)
       {
         // Save current protein score into a metaValue
-        for (auto& prot_hit : proteinID.getHits())
+        for (auto& prot_hit : proteinIDs[0].getHits())
         {
           prot_hit.setMetaValue("Prior", prot_hit.getScore());
         }
       }
 
-      FalseDiscoveryRate pepFDR;
-      Param p = pepFDR.getParameters();
-
-      // I think it is best to always use the best PSM only for comparing PSM FDR before-after
-      // since inference might change the ranking.
-      p.setValue("use_all_hits", "false");
-      pepFDR.setParameters(p);
       //TODO we have to limit the calculation to the current protein Run!!!
       // also try to calc AUC partial only (e.g. up to 5% FDR)
-      LOG_INFO << "Peptide FDR AUC before protein inference: " << pepFDR.rocN(peptideIDs, 0) << std::endl;
+      LOG_INFO << "Peptide FDR AUC before protein inference: " << pepFDR.rocN(cmap, 0) << std::endl;
 
-      proteinID.setScoreType("Posterior Probability");
-      proteinID.setInferenceEngine("Epifany");
-      proteinID.setInferenceEngineVersion(OPENMS_PACKAGE_VERSION);
-      proteinID.setHigherScoreBetter(true);
-      IDBoostGraph ibg(proteinID, cmap, 1, false);
-      inferPosteriorProbabilities(ibg);
+      proteinIDs[0].setScoreType("Posterior Probability");
+      proteinIDs[0].setInferenceEngine("Epifany");
+      proteinIDs[0].setInferenceEngineVersion(OPENMS_PACKAGE_VERSION);
+      proteinIDs[0].setHigherScoreBetter(true);
+      IDBoostGraph ibg(proteinIDs[0], cmap, 1, false);
+      inferPosteriorProbabilities_(ibg);
     }
+    else if (cmap.getProteinIdentifications().size() > 1)
+    {
+      for (auto& proteinID : cmap.getProteinIdentifications())
+      {
+        // Save current scores as priors if requested
+        if (user_defined_priors)
+        {
+          // Save current protein score into a metaValue
+          for (auto& prot_hit : proteinID.getHits())
+          {
+            prot_hit.setMetaValue("Prior", prot_hit.getScore());
+          }
+        }
+
+        //TODO we have to limit the calculation to the current protein Run!!!
+        // also try to calc AUC partial only (e.g. up to 5% FDR)
+        LOG_INFO << "Peptide FDR AUC before protein inference: " << pepFDR.rocN(cmap, 0, proteinID.getIdentifier()) << std::endl;
+
+        proteinID.setScoreType("Posterior Probability");
+        proteinID.setInferenceEngine("Epifany");
+        proteinID.setInferenceEngineVersion(OPENMS_PACKAGE_VERSION);
+        proteinID.setHigherScoreBetter(true);
+        IDBoostGraph ibg(proteinID, cmap, 1, false);
+        inferPosteriorProbabilities_(ibg);
+      }
+    }
+
+
   }
 
-  void BayesianProteinInferenceAlgorithm::inferPosteriorProbabilities(IDBoostGraph& ibg)
+  void BayesianProteinInferenceAlgorithm::inferPosteriorProbabilities_(IDBoostGraph& ibg)
   {
-    GridSearch<double,double,double> gs = initGridSearchFromParams_();
+    ibg.computeConnectedComponents();
+    ibg.clusterIndistProteinsAndPeptides();
 
+    vector<double> gamma_search;
+    vector<double> beta_search;
+    vector<double> alpha_search;
+    GridSearch<double,double,double> gs = initGridSearchFromParams_(alpha_search, beta_search, gamma_search);
+
+    std::array<size_t, 3> bestParams{{0, 0, 0}};
+
+    //Save initial settings and deactivate certain features to save time during grid search and to not
+    // interfere with later runs.
+    // TODO We could think about optimizing PSM FDR as another goal though.
+    bool update_PSM_probabilities = param_.getValue("update_PSM_probabilities").toBool();
+    param_.setValue("update_PSM_probabilities","false");
+
+    bool annotate_group_posteriors = param_.getValue("annotate_group_probabilities").toBool();
+    param_.setValue("annotate_group_probabilities","false");
+
+    //TODO run grid search on reduced graph? Then make sure, untouched protein/peps do not affect evaluation results.
+    //TODO if not, think about storing results temporary (file? mem?) and only keep the best in the end
+    //TODO think about running grid search on the small CCs only (maybe it's enough)
+    if (gs.getNrCombos() > 1)
+    {
+      std::cout << "Testing " << gs.getNrCombos() << " param combinations." << std::endl;
+      /*double res =*/ gs.evaluate(GridSearchEvaluator(param_, ibg, proteinIDs[0], debug_lvl_), -1.0, bestParams);
+    }
+    else
+    {
+      std::cout << "Only one combination specified: Skipping grid search." << std::endl;
+    }
+
+    double bestGamma = gamma_search[bestParams[2]];
+    double bestBeta = beta_search[bestParams[1]];
+    double bestAlpha = alpha_search[bestParams[0]];
+    std::cout << "Best params found at a=" << bestAlpha << ", b=" << bestBeta << ", g=" << bestGamma << std::endl;
+    std::cout << "Running with best parameters:" << std::endl;
+    param_.setValue("model_parameters:prot_prior", bestGamma);
+    param_.setValue("model_parameters:pep_emission", bestAlpha);
+    param_.setValue("model_parameters:pep_spurious_emission", bestBeta);
+    // Reset original values for those two options
+    param_.setValue("update_PSM_probabilities", update_PSM_probabilities ? "true" : "false");
+    param_.setValue("annotate_group_probabilities", annotate_group_posteriors ? "true" : "false");
+    ibg.applyFunctorOnCCs(GraphInferenceFunctor(const_cast<const Param&>(param_), debug_lvl_));
+
+
+    LOG_INFO << "Peptide FDR AUC after protein inference: " << pepFDR.rocN(peptideIDs, 0) << std::endl;
+    ibg.applyFunctorOnCCsST(AnnotateIndistGroupsFunctor(proteinIDs[0]));
   }
 
-  GridSearch<double,double,double> BayesianProteinInferenceAlgorithm::initGridSearchFromParams_()
+  GridSearch<double,double,double> BayesianProteinInferenceAlgorithm::initGridSearchFromParams_(
+      vector<double>& alpha_search,
+      vector<double>& beta_search,
+      vector<double>& gamma_search
+      )
   {
     // Do not expand gamma_search when user_defined_priors is on. Would be unused.
     double alpha = param_.getValue("model_parameters:pep_emission");
     double beta = param_.getValue("model_parameters:pep_spurious_emission");
     double gamma = param_.getValue("model_parameters:prot_prior");
-    vector<double> gamma_search;
-    vector<double> beta_search;
-    vector<double> alpha_search;
+
     if (gamma > 1.0 || gamma < 0.0)
     {
       gamma_search = {0.2, 0.5, 0.7};

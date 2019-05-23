@@ -128,18 +128,7 @@ namespace OpenMS
                             - msfiles.begin())  + 1;
         }
 
-        if (f.second.metaValueExists("channel_id"))
-        {
-          r.label = static_cast<unsigned int>(f.second.getMetaValue("channel_id")) + 1;
-        }
-        else
-        {
-          if (experiment_type != "label-free")
-          {
-            LOG_WARN << "No channel id annotated in consensusXML. Assuming one channel." << endl;
-          }
-          r.label = 1;
-        }
+        r.label = f.second.getLabelAsUInt(experiment_type);
 
         if (experiment_type == "label-free")
         {

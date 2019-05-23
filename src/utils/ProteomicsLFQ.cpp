@@ -1258,12 +1258,11 @@ protected:
       BasicProteinInferenceAlgorithm bpia;
       bpia.run(inferred_peptide_ids, inferred_protein_ids);
 
-      IDBoostGraph ibg{inferred_protein_ids[0], inferred_peptide_ids};
-      ibg.buildGraph(0);
+      IDBoostGraph ibg{inferred_protein_ids[0], inferred_peptide_ids,0,false};
       ibg.computeConnectedComponents();
       if (groups)
       {
-        ibg.annotateIndistProteins(true);
+        ibg.calculateAndAnnotateIndistProteins(true);
       }
     }
     else // if (bayesian)
@@ -1282,7 +1281,7 @@ protected:
       IDFilter::keepBestPerPeptide(inferred_peptide_ids, true, true, 1);
       IDFilter::removeEmptyIdentifications(inferred_peptide_ids);
       BayesianProteinInferenceAlgorithm bayes;
-      //bayesian inference automatically annotates groups but only non-singletons
+      //bayesian inference automatically annotates groups
       bayes.inferPosteriorProbabilities(inferred_protein_ids, inferred_peptide_ids);
     }
 

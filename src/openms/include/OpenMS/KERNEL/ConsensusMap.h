@@ -368,7 +368,7 @@ protected:
     /// protein identifications
     std::vector<ProteinIdentification> protein_identifications_;
 
-    /// protein identifications
+    /// unassigned peptide identifications (without feature)
     std::vector<PeptideIdentification> unassigned_peptide_identifications_;
 
     /// applied data processing

@@ -372,13 +372,13 @@ namespace OpenMS
      */
 
 
-    /* ----------------  Either of them is used --------------- */
+    /* ----------------  Either of them is used, preferably second  --------------- */
     /// the initial boost Graph (will be cleared when split into CCs)
     Graph g;
 
     /// the Graph split into connected components
     Graphs ccs_;
-    /* -------------------------------------------------------- */
+    /* ---------------------------------------------------------------------------- */
 
     #ifdef INFERENCE_BENCH
     /// nrnodes, nredges, nrmessages and times of last functor execution per connected component
@@ -396,6 +396,11 @@ namespace OpenMS
     /// if a graph is built with run information, this will store the run, each peptide hit
     /// vertex belongs to. Important for extending the graph.
     std::unordered_map<vertex_t, Size> pepHitVtx_to_run_;
+
+    /// this basically stores the number of different values in the pepHitVtx_to_run
+    /// a Prefractionation group (previously called run) is a unique combination
+    /// of all non-fractionation related entries in the exp. design
+    /// i.e. one (sub-)experiment before fractionation
     Size nrPrefractionationGroups_;
 
     /* ----------------------------------------------------------- */
@@ -424,7 +429,15 @@ namespace OpenMS
 
     void buildGraph_(ProteinIdentification& proteins,
                     ConsensusMap& cmap,
-                    Size use_top_psms);
+                    Size use_top_psms,
+                    bool use_unassigned_ids);
+
+    /// Used during building
+    void addPeptideIDWithAssociatedProteins_(
+        PeptideIdentification& spectrum,
+        std::unordered_map<IDPointer, vertex_t, boost::hash<IDPointer>>& vertex_map,
+        const std::unordered_map<std::string, ProteinHit*>& accession_map,
+        Size use_top_psms);
 
 
 

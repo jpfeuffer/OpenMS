@@ -266,6 +266,9 @@ protected:
       mergedprots[0].getProteinGroups().clear();
     }
 
+    //TODO BIG! This should be done only when we do not want to use run information.
+    // maybe add experimental design here too.
+    //TODO move everything here to BPI anyway
     IDFilter::keepBestPerPeptidePerRun(mergedprots, mergedpeps, true, true, static_cast<unsigned int>(epifany_param.getValue("top_PSMs")));
 
     IDFilter::removeEmptyIdentifications(mergedpeps);
@@ -321,6 +324,7 @@ protected:
 
     // Let's always add all the proteins to the protein group section, easier in postprocessing.
     // PeptideProteinResolution needs it anyway.
+    //TODO check if still needed after adding the addSingleton option to the IDGraph function
     mergedprots[0].fillIndistinguishableGroupsWithSingletons();
 
     bool greedy_group_resolution = getStringOption_("greedy_group_resolution") != "none";

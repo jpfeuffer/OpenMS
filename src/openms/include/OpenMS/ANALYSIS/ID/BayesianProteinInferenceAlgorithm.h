@@ -61,6 +61,14 @@ namespace OpenMS
     /// Destructor
     ~BayesianProteinInferenceAlgorithm() override = default;
 
+    //Note: How to perform group inference
+    // Three options:
+    // -(implemented) use the automatically created indist. groups and report their posterior
+    // - collapse proteins to groups beforehand and run inference (can be done additionally)
+    // - (if no single protein scores wanted at all) calculate prior from proteins for the group
+    //  beforehand and remove proteins from network (saves computation
+    //  because messages are not passed from prots to groups anymore.
+
     /// A function object to pass into the IDBoostGraph class to perform algorithms on
     /// connected components
     class GraphInferenceFunctor;

@@ -170,30 +170,32 @@ namespace OpenMS
   IDBoostGraph::IDBoostGraph(ProteinIdentification& proteins,
                              ConsensusMap& cmap,
                              Size use_top_psms,
-                             bool use_run_info):
+                             bool use_run_info,
+                             bool use_unassigned_ids):
       protIDs_(proteins)
   {
     if (use_run_info)
     {
-      buildGraphWithRunInfo_(proteins, cmap, use_top_psms, ExperimentalDesign::fromConsensusMap(cmap));
+      buildGraphWithRunInfo_(proteins, cmap, use_top_psms, use_unassigned_ids, ExperimentalDesign::fromConsensusMap(cmap));
     }
     else
     {
-      buildGraph_(proteins, cmap, use_top_psms);
+      buildGraph_(proteins, cmap, use_top_psms, use_unassigned_ids);
     }
   }
 
   IDBoostGraph::IDBoostGraph(ProteinIdentification& proteins,
                              ConsensusMap& cmap,
                              Size use_top_psms,
+                             bool use_unassigned_ids,
                              const ExperimentalDesign& ed):
       protIDs_(proteins)
   {
-      buildGraphWithRunInfo_(proteins, cmap, use_top_psms, ed);
+      buildGraphWithRunInfo_(proteins, cmap, use_top_psms, use_unassigned_ids, ed);
   }
 
 
-  unordered_map<unsigned, unsigned> convertMapLabelFree(
+  unordered_map<unsigned, unsigned> convertMapLabelFree_(
       const map<pair<String, unsigned>, unsigned>& fileToRun,
       const StringList& files)
   {
@@ -207,7 +209,7 @@ namespace OpenMS
     return indexToRun;
   }
 
-  unordered_map<unsigned, unsigned> convertMap(
+  unordered_map<unsigned, unsigned> convertMap_(
       const map<pair<String, unsigned>, unsigned>& fileLabToPrefractionationGroup,
       const ConsensusMap::ColumnHeaders& idxToFileLabMappings,
       const String& experiment_type)
@@ -225,6 +227,7 @@ namespace OpenMS
   void IDBoostGraph::buildGraphWithRunInfo_(ProteinIdentification& proteins,
                                            ConsensusMap& cmap,
                                            Size use_top_psms,
+                                           bool use_unassigned_ids,
                                            const ExperimentalDesign& ed)
   {
     unordered_map<unsigned, unsigned> indexToPrefractionationGroup;
@@ -237,7 +240,7 @@ namespace OpenMS
       //TODO use exp. design to merge fractions
       map<pair<String, unsigned>, unsigned> fileLabelToPrefractionationGroup = ed.getPathLabelToPrefractionationMapping(false);
       nrPrefractionationGroups_ = fileLabelToPrefractionationGroup.size();
-      indexToPrefractionationGroup = convertMap(fileLabelToPrefractionationGroup, colHeaders, cmap.getExperimentType()); // convert to index in the peptide ids
+      indexToPrefractionationGroup = convertMap_(fileLabelToPrefractionationGroup, colHeaders, cmap.getExperimentType()); // convert to index in the peptide ids
     }
 
     //TODO is this vertex_map really necessary. I think PSMs are always unique in our datastructures and could be
@@ -331,7 +334,7 @@ namespace OpenMS
       proteins.getPrimaryMSRunPath(files);
       map<pair<String, unsigned>, unsigned> fileLabelToPrefractionationGroup = ed.getPathLabelToPrefractionationMapping(false);
       nrPrefractionationGroups_ = fileLabelToPrefractionationGroup.size();
-      indexToPrefractionationGroup = convertMapLabelFree(fileLabelToPrefractionationGroup, files); // convert to index in the peptide ids
+      indexToPrefractionationGroup = convertMapLabelFree_(fileLabelToPrefractionationGroup, files); // convert to index in the peptide ids
     }
 
     //TODO is this vertex_map really necessary. I think PSMs are always unique in our datastructures and could be
@@ -446,9 +449,6 @@ namespace OpenMS
 
   //TODO actually to build the graph, the inputs could be passed const. But if you want to do sth
   // on the graph later it needs to be non-const. Overload the next functions or somehow make sure it can be used const.
-
-  //TODO BIG while going through the PepIDs, check that they belong to the same run as the proteins!!
-  // and/or create overload which checks this
   void IDBoostGraph::buildGraph_(ProteinIdentification& proteins,
                                 std::vector<PeptideIdentification>& idedSpectra,
                                 Size use_top_psms)
@@ -468,17 +468,19 @@ namespace OpenMS
     ProgressLogger pl;
     pl.setLogType(ProgressLogger::CMD);
     pl.startProgress(0, idedSpectra.size(), "Building graph...");
+    const String& protRun = proteins.getIdentifier();
     for (auto& spectrum : idedSpectra)
     {
-      addPeptideIDWithAssociatedProteins_(spectrum, vertex_map, accession_map, use_top_psms);
+      if(id.getIdentifier() == protRun)
+      {
+        addPeptideIDWithAssociatedProteins_(spectrum, vertex_map, accession_map, use_top_psms);
+      }
       pl.nextProgress();
     }
     pl.endProgress();
   }
 
 
-  //TODO BIG while going through the PepIDs, check that they belong to the same run as the proteins!!
-  // and/or create overload which checks this
   void IDBoostGraph::buildGraph_(ProteinIdentification& proteins,
                                  ConsensusMap& cmap,
                                  Size use_top_psms,
@@ -501,11 +503,16 @@ namespace OpenMS
     if (use_unassigned_ids) roughNrIds += cmap.getUnassignedPeptideIdentifications().size();
     pl.setLogType(ProgressLogger::CMD);
     pl.startProgress(0, roughNrIds, "Building graph...");
+    const String& protRun = proteins.getIdentifier();
     for (auto& feature : cmap)
     {
       for (auto& id : feature.getPeptideIdentifications())
       {
-        addPeptideIDWithAssociatedProteins_(id, vertex_map, accession_map, use_top_psms);
+        if(id.getIdentifier() == protRun)
+        {
+          addPeptideIDWithAssociatedProteins_(id, vertex_map, accession_map, use_top_psms);
+        }
+
       }
       pl.nextProgress();
     }
@@ -513,7 +520,10 @@ namespace OpenMS
     {
       for (auto& id : cmap.getUnassignedPeptideIdentifications())
       {
-        addPeptideIDWithAssociatedProteins_(id, vertex_map, accession_map, use_top_psms);
+        if(id.getIdentifier() == protRun)
+        {
+          addPeptideIDWithAssociatedProteins_(id, vertex_map, accession_map, use_top_psms);
+        }
         pl.nextProgress();
       }
     }
@@ -634,7 +644,7 @@ namespace OpenMS
 
 
   /// Do sth on ccs
-  void IDBoostGraph::applyFunctorOnCCs(std::function<unsigned long(Graph&)>& functor)
+  void IDBoostGraph::applyFunctorOnCCs(const std::function<unsigned long(Graph&)>& functor)
   {
     if (ccs_.empty()) {
       throw Exception::MissingInformation(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION, "No connected components annotated. Run computeConnectedComponents first!");
@@ -683,7 +693,7 @@ namespace OpenMS
   }
 
   /// Do sth on ccs single-threaded
-  void IDBoostGraph::applyFunctorOnCCsST(std::function<void(Graph&)>& functor)
+  void IDBoostGraph::applyFunctorOnCCsST(const std::function<void(Graph&)>& functor)
   {
     if (ccs_.empty()) {
       throw Exception::MissingInformation(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION, "No connected components annotated. Run computeConnectedComponents first!");
@@ -922,6 +932,87 @@ namespace OpenMS
         }
       }
     }
+  }
+
+  void IDBoostGraph::getUpstreamNodesNonRecursive(std::queue<vertex_t>& q, Graph graph, int lvl, bool stop_at_first, std::vector<vertex_t>& result)
+  {
+    while (!q.empty())
+    {
+      vertex_t curr_node = q.front();
+      q.pop();
+      Graph::adjacency_iterator adjIt, adjIt_end;
+      boost::tie(adjIt, adjIt_end) = boost::adjacent_vertices(curr_node, graph);
+      for (;adjIt != adjIt_end; ++adjIt)
+      {
+        if (graph[*adjIt].which() <= lvl)
+        {
+          result.emplace_back(*adjIt);
+          if (!stop_at_first && graph[*adjIt].which() > graph[curr_node].which())
+          {
+            q.emplace(*adjIt);
+          }
+        } else if (graph[*adjIt].which() > graph[curr_node].which())
+          {
+            q.emplace(*adjIt);
+          }
+      }
+    }
+  }
+
+  void IDBoostGraph::resolveGraphProteinCentric_(const Graph& fg/*, bool resolveTies*/)
+  {
+    Graph::vertex_iterator ui, ui_end;
+    boost::tie(ui,ui_end) = boost::vertices(fg);
+
+    unordered_set<vertex_t> prots;
+    for (; ui != ui_end; ++ui)
+    {
+      if (fg[*ui].which() == 0) //prot
+      {
+        Graph::adjacency_iterator nbIt, nbIt_end;
+        boost::tie(nbIt, nbIt_end) = boost::adjacent_vertices(*ui, fg);
+        if (fg[*nbIt].which() == 1) // if the first neighbor is a group it is not a singleton
+        {
+          //add to set
+        }
+        else
+        {
+          //add prot to set
+        }
+      }
+    }
+    //sort by score
+    //for each:
+    // go through peps and remove all incoming connections except the one to this
+  }
+
+  void IDBoostGraph::resolveGraphPeptideCentric_(Graph& fg/*, bool resolveTies*/)
+  {
+    Graph::vertex_iterator ui, ui_end;
+    boost::tie(ui,ui_end) = boost::vertices(fg);
+
+    for (; ui != ui_end; ++ui)
+    {
+      if (fg[*ui].which() == 2) // It should suffice to resolve at the pep cluster level
+        // if a pep does not belong to a cluster it didnt have multiple parents and
+        // therefore does not need to be resolved
+      {
+        vector<vertex_t> prots;
+        queue<vertex_t> start;
+        start.push(*ui);
+        getUpstreamNodesNonRecursive(start,fg,1,true,prots);
+        //TODO preinit the visitor?
+        auto score_compare = [&fg](vertex_t& n, vertex_t& m) -> bool
+            {return boost::apply_visitor(GetPosteriorVisitor{}, fg[n]) < boost::apply_visitor(GetPosteriorVisitor{}, fg[m]);};
+        auto max_v = std::max_element(prots.begin(), prots.end(), score_compare); //returns an iterator
+        //TODO how to resolve ties
+
+        //TODO set scores of rest to zero and/or remove edges
+        //if the node is a group, find their members first.
+      }
+    }
+
+
   }
 
 
@@ -1506,6 +1597,11 @@ namespace OpenMS
     return ccs_.size();
   }
 
+  ProteinIdentification& IDBoostGraph::getProteinIDs()
+  {
+    return protIDs_;
+  }
+
   // TODO templatize
   void IDBoostGraph::printFilteredGraph(std::ostream& out, const FilteredGraph& fg)
   {
@@ -1553,6 +1649,8 @@ namespace OpenMS
   {
     return 1;
   }
+
+
 
 }
 

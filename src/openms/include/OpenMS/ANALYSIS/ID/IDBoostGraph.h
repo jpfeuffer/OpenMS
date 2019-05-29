@@ -48,6 +48,7 @@
 
 #include <vector>
 #include <unordered_map>
+#include <queue>
 
 #include <boost/function.hpp>
 #include <boost/graph/adjacency_list.hpp>
@@ -284,31 +285,62 @@ namespace OpenMS
 
     };
 
+    class GetPosteriorVisitor:
+        public boost::static_visitor<double>
+    {
+    public:
+
+      double operator()(PeptideHit* pep) const
+      {
+        return pep->getScore();
+      }
+
+      double operator()(ProteinHit* prot) const
+      {
+        return prot->getScore();
+      }
+
+      double operator()(ProteinGroup& pg) const
+      {
+        return pg;
+      }
+
+      // Everything else, do nothing for now
+      template <class T>
+      double operator()(T& /*any node type*/, double /*posterior*/) const
+      {
+        return -1.0;
+      }
+
+    };
+
     /// Constructors
     IDBoostGraph(ProteinIdentification& proteins,
-                               std::vector<PeptideIdentification>& idedSpectra,
-                               Size use_top_psms,
-                               bool use_run_info);
+                  std::vector<PeptideIdentification>& idedSpectra,
+                  Size use_top_psms,
+                  bool use_run_info);
 
     IDBoostGraph(ProteinIdentification& proteins,
-                               std::vector<PeptideIdentification>& idedSpectra,
-                               Size use_top_psms,
-                               const ExperimentalDesign& ed);
+                  std::vector<PeptideIdentification>& idedSpectra,
+                  Size use_top_psms,
+                  const ExperimentalDesign& ed);
 
     IDBoostGraph(ProteinIdentification& proteins,
-                               ConsensusMap& cmap,
-                               Size use_top_psms,
-                               bool use_run_info);
+                 ConsensusMap& cmap,
+                 Size use_top_psms,
+                 bool use_run_info,
+                 bool use_unassigned_ids);
 
     IDBoostGraph(ProteinIdentification& proteins,
-                               ConsensusMap& cmap,
-                               Size use_top_psms,
-                               const ExperimentalDesign& ed);
+                 ConsensusMap& cmap,
+                 Size use_top_psms,
+                 bool use_unassigned_ids,
+                 const ExperimentalDesign& ed);
 
     /// Do sth on connected components (your functor object has to inherit from std::function or be a lambda)
-    void applyFunctorOnCCs(std::function<unsigned long(Graph&)>& functor);
+    void applyFunctorOnCCs(const std::function<unsigned long(Graph&)>& functor);
     /// Do sth on connected components single threaded (your functor object has to inherit from std::function or be a lambda)
-    void applyFunctorOnCCsST(std::function<void(Graph&)>& functor);
+    void applyFunctorOnCCsST(const std::function<void(Graph&)>& functor);
 
     /// Add intermediate nodes to the graph that represent indist. protein groups and peptides with the same parents
     /// this will save computation time and oscillations later on.
@@ -339,6 +371,8 @@ namespace OpenMS
 
     /// Zero means the graph was not split yet
     Size getNrConnectedComponents();
+
+    ProteinIdentification& getProteinIDs();
 
     //TODO docu
     //void buildExtendedGraph(bool use_all_psms, std::pair<int,int> chargeRange, unsigned int nrReplicates);
@@ -450,12 +484,55 @@ namespace OpenMS
     void buildGraphWithRunInfo_(ProteinIdentification& proteins,
                                ConsensusMap& cmap,
                                Size use_top_psms,
+                               bool use_unassigned_ids,
                                const ExperimentalDesign& ed);
 
     void buildGraphWithRunInfo_(ProteinIdentification& proteins,
                                std::vector<PeptideIdentification>& idedSpectra,
                                Size use_top_psms,
                                const ExperimentalDesign& ed);
+
+
+    void getUpstreamNodesNonRecursive(std::queue<vertex_t>& q, Graph graph, int lvl,
+        bool stop_at_first, std::vector<vertex_t>& result);
+
+    void resolveGraphPeptideCentric_(Graph& fg);
+
+    template<class NodeType>
+    void getDownstreamNodes(vertex_t start, Graph graph, std::vector<NodeType>& result)
+    {
+      Graph::adjacency_iterator adjIt, adjIt_end;
+      boost::tie(adjIt, adjIt_end) = boost::adjacent_vertices(start, graph);
+      for (;adjIt != adjIt_end; ++adjIt)
+      {
+        if (graph[*adjIt].type() == typeid(NodeType))
+        {
+          result.emplace_back(boost::get<NodeType>(graph[*adjIt]));
+        }
+        else if (graph[*adjIt].which() > graph[start].which())
+        {
+          getDownstreamNodes(*adjIt, graph, result);
+        }
+      }
+    }
+
+    template<class NodeType>
+    void getUpstreamNodes(vertex_t start, Graph graph, std::vector<NodeType>& result)
+    {
+      Graph::adjacency_iterator adjIt, adjIt_end;
+      boost::tie(adjIt, adjIt_end) = boost::adjacent_vertices(start, graph);
+      for (;adjIt != adjIt_end; ++adjIt)
+      {
+        if (graph[*adjIt].type() == typeid(NodeType))
+        {
+          result.emplace_back(boost::get<NodeType>(graph[*adjIt]));
+        }
+        else if (graph[*adjIt].which() < graph[start].which())
+        {
+          getUpstreamNodes(*adjIt, graph, result);
+        }
+      }
+    }
   };
 
 } //namespace OpenMS

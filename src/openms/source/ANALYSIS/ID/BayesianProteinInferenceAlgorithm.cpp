@@ -50,13 +50,17 @@ using namespace std;
 
 namespace OpenMS
 {
+  /* TODO This is implemented in the IDBoostGraph class now. Remove if it works.
   /// Only works if ProteinGroup nodes are present, which is the case when used in this class
   //TODO private
   class BayesianProteinInferenceAlgorithm::AnnotateIndistGroupsFunctor :
       public std::function<void(IDBoostGraph::Graph&)>
   {
+  private:
+    ProteinIdentification& prots;
   public:
-    explicit AnnotateIndistGroupsFunctor():
+    explicit AnnotateIndistGroupsFunctor(ProteinIdentification& proteinIDToAnnotateGroups):
+        prots(proteinIDToAnnotateGroups)
     {}
 
     void operator() (IDBoostGraph::Graph& fg) {
@@ -91,10 +95,11 @@ namespace OpenMS
       }
     }
   };
+   */
 
   /// A functor that specifies what to do on a connected component (IDBoostGraph::FilteredGraph)
   class BayesianProteinInferenceAlgorithm::GraphInferenceFunctor :
-      public std::function<void(IDBoostGraph::Graph&)>
+      public std::function<unsigned long(IDBoostGraph::Graph&)>
   {
   public:
     //TODO think about restructuring params (we do not need every param from the BPI class here.
@@ -311,7 +316,7 @@ namespace OpenMS
 
   /// A functor that specifies what to do on a connected component (IDBoostGraph::FilteredGraph)
   class BayesianProteinInferenceAlgorithm::ExtendedGraphInferenceFunctor :
-      public std::function<void(IDBoostGraph::Graph&)>
+      public std::function<unsigned long(IDBoostGraph::Graph&)>
   {
   public:
     const Param& param_;
@@ -461,13 +466,11 @@ namespace OpenMS
   {
     Param& param_;
     IDBoostGraph& ibg_;
-    const ProteinIdentification& prots_;
     const unsigned int debug_lvl_;
 
-    explicit GridSearchEvaluator(Param& param, IDBoostGraph& ibg, const ProteinIdentification& prots, unsigned int debug_lvl):
+    explicit GridSearchEvaluator(Param& param, IDBoostGraph& ibg, unsigned int debug_lvl):
         param_(param),
         ibg_(ibg),
-        prots_(prots),
         debug_lvl_(debug_lvl)
     {}
 
@@ -477,12 +480,13 @@ namespace OpenMS
       param_.setValue("model_parameters:prot_prior", gamma);
       param_.setValue("model_parameters:pep_emission", alpha);
       param_.setValue("model_parameters:pep_spurious_emission", beta);
-      ibg_.applyFunctorOnCCs(GraphInferenceFunctor(const_cast<const Param&>(param_), debug_lvl_));
+      const GraphInferenceFunctor& gif {const_cast<const Param&>(param_), debug_lvl_};
+      ibg_.applyFunctorOnCCs(gif);
       FalseDiscoveryRate fdr;
       Param fdrparam = fdr.getParameters();
       fdrparam.setValue("conservative",param_.getValue("param_optimize:conservative_fdr"));
       fdr.setParameters(fdrparam);
-      return fdr.applyEvaluateProteinIDs(prots_, 1.0, 50, static_cast<double>(param_.getValue("param_optimize:aucweight")));
+      return fdr.applyEvaluateProteinIDs(ibg_.getProteinIDs(), 1.0, 50, static_cast<double>(param_.getValue("param_optimize:aucweight")));
     }
   };
 
@@ -541,6 +545,11 @@ namespace OpenMS
                        "Annotates group probabilities for indistinguishable protein groups (indistinguishable by "
                        "experimentally observed PSMs).");
     defaults_.setValidStrings("annotate_group_probabilities", {"true","false"});
+
+    defaults_.setValue("use_ids_outside_features",
+                       "false",
+                       "(Only consensusXML) Also use IDs without associated features for inference?");
+    defaults_.setValidStrings("use_ids_outside_features", {"true","false"});
 
     defaults_.addSection("model_parameters","Model parameters for the Bayesian network");
 
@@ -639,6 +648,8 @@ namespace OpenMS
     defaultsToParam_();
     updateMembers_();
 
+    //Note: this function can be changed, e.g. when we want to do a extremum removal etc. beforehand
+    //TODO test performance of getting the probability cutoff everytime.
     double probability_cutoff = param_.getValue("psm_probability_cutoff");
     checkConvertAndFilterPepHits = [probability_cutoff](PeptideIdentification& pep_id){
       String score_l = pep_id.getScoreType();
@@ -652,6 +663,7 @@ namespace OpenMS
         }
         pep_id.setScoreType("Posterior Probability");
         pep_id.setHigherScoreBetter(true);
+        //TODO remove hits "on-the-go"?
         IDFilter::removeMatchingItems(pep_id.getHits(),
             [&probability_cutoff](PeptideHit& hit){ return hit.getScore() <= probability_cutoff;});
       }
@@ -671,7 +683,7 @@ namespace OpenMS
   }
 
 
-/* TODO under construction
+/* TODO under construction: mode based on theoretical digest
   void BayesianProteinInferenceAlgorithm::inferPosteriorProbabilities(
       ConsensusMap cmap,
       const ExperimentalDesign& expDesign,
@@ -698,10 +710,21 @@ namespace OpenMS
     //pi.run<FASTAContainer<TFI_File>>(fastaDB, singletonProteinId, pepIdConcatReplicates);
 */
 
-  void BayesianProteinInferenceAlgorithm::inferPosteriorProbabilities(ConsensusMap& cmap)
+  void setScoreTypeAndSettings_(ProteinIdentification& proteinIDs)
   {
+    proteinIDs.setScoreType("Posterior Probability");
+    proteinIDs.setInferenceEngine("Epifany");
+    proteinIDs.setInferenceEngineVersion(OPENMS_PACKAGE_VERSION);
+    proteinIDs.setHigherScoreBetter(true);
+  }
+
+  void BayesianProteinInferenceAlgorithm::inferPosteriorProbabilities(ConsensusMap& cmap, bool use_run_info)
+  {
+    //TODO BIG filtering needs to account for run info if used
     cmap.applyFunctionOnPeptideIDs(checkConvertAndFilterPepHits);
     bool user_defined_priors = param_.getValue("user_defined_priors").toBool();
+    bool use_unannotated_ids = param_.getValue("use_ids_outside_features").toBool();
+    Size nr_top_psms = static_cast<Size>(param_.getValue("top_PSMs"));
 
     FalseDiscoveryRate pepFDR;
     Param p = pepFDR.getParameters();
@@ -724,16 +747,14 @@ namespace OpenMS
         }
       }
 
-      //TODO we have to limit the calculation to the current protein Run!!!
-      // also try to calc AUC partial only (e.g. up to 5% FDR)
+      // TODO try to calc AUC partial only (e.g. up to 5% FDR)
       LOG_INFO << "Peptide FDR AUC before protein inference: " << pepFDR.rocN(cmap, 0) << std::endl;
 
-      proteinIDs[0].setScoreType("Posterior Probability");
-      proteinIDs[0].setInferenceEngine("Epifany");
-      proteinIDs[0].setInferenceEngineVersion(OPENMS_PACKAGE_VERSION);
-      proteinIDs[0].setHigherScoreBetter(true);
-      IDBoostGraph ibg(proteinIDs[0], cmap, 1, false);
+      IDBoostGraph ibg(proteinIDs[0], cmap, nr_top_psms, use_run_info, use_unannotated_ids);
       inferPosteriorProbabilities_(ibg);
+      setScoreTypeAndSettings_(proteinIDs[0]);
+
+      LOG_INFO << "Peptide FDR AUC after protein inference: " << pepFDR.rocN(cmap, 0) << std::endl;
     }
     else if (cmap.getProteinIdentifications().size() > 1)
     {
@@ -749,23 +770,19 @@ namespace OpenMS
           }
         }
 
-        //TODO we have to limit the calculation to the current protein Run!!!
-        // also try to calc AUC partial only (e.g. up to 5% FDR)
+        //TODO try to calc AUC partial only (e.g. up to 5% FDR)
         LOG_INFO << "Peptide FDR AUC before protein inference: " << pepFDR.rocN(cmap, 0, proteinID.getIdentifier()) << std::endl;
 
-        proteinID.setScoreType("Posterior Probability");
-        proteinID.setInferenceEngine("Epifany");
-        proteinID.setInferenceEngineVersion(OPENMS_PACKAGE_VERSION);
-        proteinID.setHigherScoreBetter(true);
-        IDBoostGraph ibg(proteinID, cmap, 1, false);
+        IDBoostGraph ibg(proteinID, cmap, nr_top_psms, use_run_info, use_unannotated_ids);
         inferPosteriorProbabilities_(ibg);
+        setScoreTypeAndSettings_(proteinID);
+
+        LOG_INFO << "Peptide FDR AUC after protein inference: " << pepFDR.rocN(cmap, 0, proteinID.getIdentifier()) << std::endl;
       }
     }
-
-
   }
 
-  void BayesianProteinInferenceAlgorithm::inferPosteriorProbabilities_(IDBoostGraph& ibg)
+  void BayesianProteinInferenceAlgorithm::inferPosteriorProbabilities_(IDBoostGraph& ibg, bool use_run_info)
   {
     ibg.computeConnectedComponents();
     ibg.clusterIndistProteinsAndPeptides();
@@ -792,7 +809,7 @@ namespace OpenMS
     if (gs.getNrCombos() > 1)
     {
       std::cout << "Testing " << gs.getNrCombos() << " param combinations." << std::endl;
-      /*double res =*/ gs.evaluate(GridSearchEvaluator(param_, ibg, proteinIDs[0], debug_lvl_), -1.0, bestParams);
+      /*double res =*/ gs.evaluate(GridSearchEvaluator(param_, ibg, debug_lvl_), -1.0, bestParams);
     }
     else
     {
@@ -810,11 +827,21 @@ namespace OpenMS
     // Reset original values for those two options
     param_.setValue("update_PSM_probabilities", update_PSM_probabilities ? "true" : "false");
     param_.setValue("annotate_group_probabilities", annotate_group_posteriors ? "true" : "false");
-    ibg.applyFunctorOnCCs(GraphInferenceFunctor(const_cast<const Param&>(param_), debug_lvl_));
 
+    if (use_run_info)
+    {
+      const GraphInferenceFunctor& gif {const_cast<const Param&>(param_), debug_lvl_};
+      ibg.applyFunctorOnCCs(gif);
+    }
+    else
+    {
+      //TODO under construction
+      const ExtendedGraphInferenceFunctor& gif {const_cast<const Param&>(param_)};
+      ibg.applyFunctorOnCCs(gif);
+    }
 
-    LOG_INFO << "Peptide FDR AUC after protein inference: " << pepFDR.rocN(peptideIDs, 0) << std::endl;
-    ibg.applyFunctorOnCCsST(AnnotateIndistGroupsFunctor(proteinIDs[0]));
+    //uses the existing protein group nodes in the graph
+    ibg.annotateIndistProteins(true);
   }
 
   GridSearch<double,double,double> BayesianProteinInferenceAlgorithm::initGridSearchFromParams_(
@@ -856,7 +883,9 @@ namespace OpenMS
     return GridSearch<double,double,double>{alpha_search, beta_search, gamma_search};
   }
 
-  void BayesianProteinInferenceAlgorithm::inferPosteriorProbabilities(std::vector<ProteinIdentification>& proteinIDs, std::vector<PeptideIdentification>& peptideIDs)
+  void BayesianProteinInferenceAlgorithm::inferPosteriorProbabilities(
+      std::vector<ProteinIdentification>& proteinIDs,
+      std::vector<PeptideIdentification>& peptideIDs)
   {
 
     //TODO The following is a sketch to think about how to include missing peptides
@@ -897,20 +926,12 @@ namespace OpenMS
       }
     }*/
 
-
     //TODO actually loop over all proteinID runs.
 
-    //TODO would be better if we set this after inference but only here we currently have
-    // non-const access.
-    //TODO if you do peptide rescoring, you could/should actually set the search_engine parameter
-    //TODO add the most important settings of Epifany in SearchParameter metavalues, like PercolatorAdapter.
-    proteinIDs[0].setScoreType("Posterior Probability");
-    proteinIDs[0].setInferenceEngine("Epifany");
-    proteinIDs[0].setInferenceEngineVersion(OPENMS_PACKAGE_VERSION);
-    proteinIDs[0].setHigherScoreBetter(true);
+    //TODO BIG filtering needs to account for run info if used
+    std::for_each(peptideIDs.begin(),peptideIDs.end(),checkConvertAndFilterPepHits);
 
-    // init empty graph
-    IDBoostGraph ibg(proteinIDs[0], peptideIDs);
+    Size nr_top_psms = static_cast<Size>(param_.getValue("top_PSMs"));
 
     FalseDiscoveryRate pepFDR;
     Param p = pepFDR.getParameters();
@@ -919,7 +940,6 @@ namespace OpenMS
     // since inference might change the ranking.
     p.setValue("use_all_hits", "false");
     pepFDR.setParameters(p);
-    LOG_INFO << "Peptide FDR AUC before protein inference: " << pepFDR.rocN(peptideIDs, 0) << std::endl;
 
     bool user_defined_priors = param_.getValue("user_defined_priors").toBool();
     if (user_defined_priors)
@@ -931,105 +951,47 @@ namespace OpenMS
       }
     }
 
-    ibg.buildGraph(param_.getValue("top_PSMs"));
-    ibg.computeConnectedComponents();
-    ibg.clusterIndistProteinsAndPeptides();
+    LOG_INFO << "Peptide FDR AUC before protein inference: " << pepFDR.rocN(peptideIDs, 0, proteinIDs[0].getIdentifier()) << std::endl;
 
-    //Note: How to perform group inference
-    // Three options:
-    // -(implemented) use the automatically created indist. groups and report their posterior
-    // - collapse proteins to groups beforehand and run inference
-    // - calculate prior from proteins for the group beforehand and remove proteins from network (saves computation
-    //  because messages are not passed from prots to groups anymore.
+    IDBoostGraph ibg(proteinIDs[0], peptideIDs, nr_top_psms, use_run_info_or_expdes);
+    inferPosteriorProbabilities_(ibg);
+    setScoreTypeAndSettings_(proteinIDs[0]);
 
+    LOG_INFO << "Peptide FDR AUC after protein inference: " << pepFDR.rocN(peptideIDs, 0, proteinIDs[0].getIdentifier()) << std::endl;
+  }
 
-    //TODO Use gold search that goes deeper into the grid where it finds the best value.
-    //We have to do it on a whole dataset basis though (all CCs). -> I have to refactor to actually store as much
-    //as possible (it would be cool to store the inference graph but this is probably not possible bc that is why
-    //I split up in CCs.
-    // OR you could save the outputs! One value for every protein, per parameter set.
+  void BayesianProteinInferenceAlgorithm::inferPosteriorProbabilities(
+      std::vector<ProteinIdentification>& proteinIDs,
+      std::vector<PeptideIdentification>& peptideIDs)
+  {
+    //TODO actually loop over all proteinID runs.
 
-    // Do not expand gamma_search when user_defined_priors is on. Would be unused.
-    double alpha = param_.getValue("model_parameters:pep_emission");
-    double beta = param_.getValue("model_parameters:pep_spurious_emission");
-    double gamma = param_.getValue("model_parameters:prot_prior");
-    vector<double> gamma_search;
-    vector<double> beta_search;
-    vector<double> alpha_search;
-    if (gamma > 1.0 || gamma < 0.0)
+    Size nr_top_psms = static_cast<Size>(param_.getValue("top_PSMs"));
+
+    FalseDiscoveryRate pepFDR;
+    Param p = pepFDR.getParameters();
+
+    // I think it is best to always use the best PSM only for comparing PSM FDR before-after
+    // since inference might change the ranking.
+    p.setValue("use_all_hits", "false");
+    pepFDR.setParameters(p);
+
+    bool user_defined_priors = param_.getValue("user_defined_priors").toBool();
+    if (user_defined_priors)
     {
-      gamma_search = {0.2, 0.5, 0.7};
-    }
-    else
-    {
-      gamma_search = {gamma};
-    }
-    if (beta > 1.0 || beta < 0.0)
-    {
-      beta_search = {0.001};
-    }
-    else
-    {
-      beta_search = {beta};
-    }
-    if (alpha > 1.0 || alpha < 0.0)
-    {
-      alpha_search = {0.1, 0.25, 0.5, 0.65, 0.8};
-    }
-    else
-    {
-      alpha_search = {alpha};
+      // Save current protein score into a metaValue
+      for (auto& prot_hit : proteinIDs[0].getHits())
+      {
+        prot_hit.setMetaValue("Prior", prot_hit.getScore());
+      }
     }
 
-    GridSearch<double,double,double> gs{alpha_search, beta_search, gamma_search};
+    LOG_INFO << "Peptide FDR AUC before protein inference: " << pepFDR.rocN(peptideIDs, 0, proteinIDs[0].getIdentifier()) << std::endl;
 
-    std::array<size_t, 3> bestParams{{0, 0, 0}};
+    IDBoostGraph ibg(proteinIDs[0], peptideIDs, nr_top_psms, use_run_info_or_expdes);
+    inferPosteriorProbabilities_(ibg);
+    setScoreTypeAndSettings_(proteinIDs[0]);
 
-    //Save initial settings and deactivate certain features to save time during grid search and to not
-    // interfere with later runs.
-    // TODO We could think about optimizing PSM FDR as another goal though.
-    bool update_PSM_probabilities = param_.getValue("update_PSM_probabilities").toBool();
-    param_.setValue("update_PSM_probabilities","false");
-
-    bool annotate_group_posteriors = param_.getValue("annotate_group_probabilities").toBool();
-    param_.setValue("annotate_group_probabilities","false");
-
-    //TODO run grid search on reduced graph? Then make sure, untouched protein/peps do not affect evaluation results.
-    //TODO if not, think about storing results temporary (file? mem?) and only keep the best in the end
-    //TODO think about running grid search on the small CCs only (maybe it's enough)
-    if (gs.getNrCombos() > 1)
-    {
-      std::cout << "Testing " << gs.getNrCombos() << " param combinations." << std::endl;
-      /*double res =*/ gs.evaluate(GridSearchEvaluator(param_, ibg, proteinIDs[0], debug_lvl_), -1.0, bestParams);
-    }
-    else
-    {
-      std::cout << "Only one combination specified: Skipping grid search." << std::endl;
-    }
-
-    double bestGamma = gamma_search[bestParams[2]];
-    double bestBeta = beta_search[bestParams[1]];
-    double bestAlpha = alpha_search[bestParams[0]];
-    std::cout << "Best params found at a=" << bestAlpha << ", b=" << bestBeta << ", g=" << bestGamma << std::endl;
-    std::cout << "Running with best parameters:" << std::endl;
-    param_.setValue("model_parameters:prot_prior", bestGamma);
-    param_.setValue("model_parameters:pep_emission", bestAlpha);
-    param_.setValue("model_parameters:pep_spurious_emission", bestBeta);
-    // Reset original values for those two options
-    param_.setValue("update_PSM_probabilities", update_PSM_probabilities ? "true" : "false");
-    param_.setValue("annotate_group_probabilities", annotate_group_posteriors ? "true" : "false");
-    ibg.applyFunctorOnCCs(GraphInferenceFunctor(const_cast<const Param&>(param_), debug_lvl_));
-
-
-    LOG_INFO << "Peptide FDR AUC after protein inference: " << pepFDR.rocN(peptideIDs, 0) << std::endl;
-    ibg.applyFunctorOnCCsST(AnnotateIndistGroupsFunctor(proteinIDs[0]));
-
-    // rename score_type in PepIDs? I think not. Posterior Probability is still fine. You can
-    // get the type from search_engine = Epifany + setting = on.
-    // TODO But we could set the "search engine". E.g. Percolator sets itself, too and is just a rescoring.
-    //if (update_PSM_probabilities)
-    //{}
-    //TODO set all unused (= not top) PSMs to 0 or remove! Currently not so bad because FDR also can take just the best.
-
+    LOG_INFO << "Peptide FDR AUC after protein inference: " << pepFDR.rocN(peptideIDs, 0, proteinIDs[0].getIdentifier()) << std::endl;
   }
 }

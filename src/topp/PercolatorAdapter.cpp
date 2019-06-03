@@ -88,7 +88,7 @@ depending on the search engine. Must be prepared beforehand. If you do not want
 to use the specific features, use the generic-feature-set flag. Will incorporate
 the score attribute of a PSM, so be sure, the score you want is set as main
 score with @ref TOPP_IDScoreSwitcher . Be aware, that you might very well
-experience a perfomance loss compared to the search engine specific features.</p>
+experience a performance loss compared to the search engine specific features.</p>
 
   <B>The command line parameters of this tool are:</B>
   @verbinclude TOPP_PercolatorAdapter.cli
@@ -302,7 +302,7 @@ protected:
   }
   
   // TODO replace with TopPerc::getScanMergeKey
-  Int getScanNumber_(String scan_identifier)
+  Int getScanNumber_(const String& scan_identifier)
   {
     Int scan_number = 0;
     StringList fields = ListUtils::create<String>(scan_identifier);
@@ -461,6 +461,7 @@ protected:
         hit.setMetaValue("mass", exp_mass);
         
         double score = hit.getScore();
+        // TODO better to use log scores for E-value based scores
         hit.setMetaValue("score", score);
         
         int peptide_length = unmodified_sequence.size();
@@ -527,7 +528,7 @@ protected:
     }
   }
   
-  void readPoutAsMap_(String pout_file, std::map<String, PercolatorResult>& pep_map)
+  void readPoutAsMap_(const String& pout_file, std::map<String, PercolatorResult>& pep_map)
   {
     CsvFile csv_file(pout_file, '\t');
     StringList row;
@@ -547,7 +548,7 @@ protected:
     }
   }
   
-  void readProteinPoutAsMapAndAddGroups_(String pout_protein_file, std::map<String, PercolatorProteinResult>& protein_map, ProteinIdentification& protID_to_add_grps)
+  void readProteinPoutAsMapAndAddGroups_(const String& pout_protein_file, std::map<String, PercolatorProteinResult>& protein_map, ProteinIdentification& protID_to_add_grps)
   {
     //TODO currently qvalue is the standard score for proteins. PEP is in metaValue.
     // Groups only hold main score = qvalue. Should be enough for 99% of applications
@@ -574,16 +575,15 @@ protected:
     }
   }
   
-  ExitCodes readInputFiles_(StringList in_list, vector<PeptideIdentification>& all_peptide_ids, vector<ProteinIdentification>& all_protein_ids, bool isDecoy, bool& found_decoys, int& min_charge, int& max_charge)
+  ExitCodes readInputFiles_(const StringList& in_list, vector<PeptideIdentification>& all_peptide_ids, vector<ProteinIdentification>& all_protein_ids, bool isDecoy, bool& found_decoys, int& min_charge, int& max_charge)
   {
-    for (StringList::iterator fit = in_list.begin(); fit != in_list.end(); ++fit)
+    for (StringList::const_iterator fit = in_list.begin(); fit != in_list.end(); ++fit)
     {
       String file_idx(distance(in_list.begin(), fit));
       vector<PeptideIdentification> peptide_ids;
       vector<ProteinIdentification> protein_ids;
       String in = *fit;
-      FileHandler fh;
-      FileTypes::Type in_type = fh.getType(in);
+      FileTypes::Type in_type = FileHandler::getType(in);
       LOG_INFO << "Loading input file: " << in << endl;
       if (in_type == FileTypes::IDXML)
       {
@@ -724,15 +724,13 @@ protected:
     const String in_osw = getStringOption_("in_osw");
     const String osw_level = getStringOption_("osw_level");
 
-    FileHandler fh;
-
     //output file names and types
     String out = getStringOption_("out");
     FileTypes::Type out_type = FileTypes::nameToType(getStringOption_("out_type"));
 
     if (out_type == FileTypes::UNKNOWN)
     {
-      out_type = fh.getTypeByFileName(out);
+      out_type = FileHandler::getTypeByFileName(out);
     }
 
     if (out_type == FileTypes::UNKNOWN)

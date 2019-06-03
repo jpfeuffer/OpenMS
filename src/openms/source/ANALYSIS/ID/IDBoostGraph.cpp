@@ -142,15 +142,17 @@ namespace OpenMS
     Size nrReplicates_;
   };
 
+
   IDBoostGraph::IDBoostGraph(ProteinIdentification& proteins,
                              std::vector<PeptideIdentification>& idedSpectra,
                              Size use_top_psms,
-                             bool use_run_info):
+                             bool use_run_info,
+                             const boost::optional<const ExperimentalDesign&>& ed):
       protIDs_(proteins)
   {
     if (use_run_info)
     {
-      buildGraphWithRunInfo_(proteins, idedSpectra, use_top_psms, ExperimentalDesign::fromIdentifications({proteins}));
+      buildGraphWithRunInfo_(proteins, idedSpectra, use_top_psms, ed.value_or(ExperimentalDesign::fromIdentifications({proteins})));
     }
     else
     {
@@ -159,39 +161,21 @@ namespace OpenMS
   }
 
   IDBoostGraph::IDBoostGraph(ProteinIdentification& proteins,
-                             std::vector<PeptideIdentification>& idedSpectra,
-                             Size use_top_psms,
-                             const ExperimentalDesign& ed):
-      protIDs_(proteins)
-  {
-      buildGraphWithRunInfo_(proteins, idedSpectra, use_top_psms, ed);
-  }
-
-  IDBoostGraph::IDBoostGraph(ProteinIdentification& proteins,
                              ConsensusMap& cmap,
                              Size use_top_psms,
                              bool use_run_info,
-                             bool use_unassigned_ids):
+                             bool use_unassigned_ids,
+                             const boost::optional<const ExperimentalDesign&>& ed):
       protIDs_(proteins)
   {
     if (use_run_info)
     {
-      buildGraphWithRunInfo_(proteins, cmap, use_top_psms, use_unassigned_ids, ExperimentalDesign::fromConsensusMap(cmap));
+      buildGraphWithRunInfo_(proteins, cmap, use_top_psms, use_unassigned_ids, ed.value_or(ExperimentalDesign::fromConsensusMap(cmap)));
     }
     else
     {
       buildGraph_(proteins, cmap, use_top_psms, use_unassigned_ids);
     }
-  }
-
-  IDBoostGraph::IDBoostGraph(ProteinIdentification& proteins,
-                             ConsensusMap& cmap,
-                             Size use_top_psms,
-                             bool use_unassigned_ids,
-                             const ExperimentalDesign& ed):
-      protIDs_(proteins)
-  {
-      buildGraphWithRunInfo_(proteins, cmap, use_top_psms, use_unassigned_ids, ed);
   }
 
 
@@ -224,6 +208,103 @@ namespace OpenMS
   }
 
 
+  void IDBoostGraph::addPeptideIDWithAssociatedProteins_(PeptideIdentification& spectrum,
+      unordered_map<IDPointer, vertex_t, boost::hash<IDPointer>>& vertex_map,
+      const unordered_map<string, ProteinHit*>& accession_map,
+      Size use_top_psms)
+  {
+    //TODO add psm regularizer nodes here optionally if using multiple psms (i.e. forcing them, so that only 1 or maybe 2 are present per spectrum)
+    auto pepIt = spectrum.getHits().begin();
+    //TODO sort or assume sorted
+    auto pepItEnd = (use_top_psms == 0 || (spectrum.getHits().size() <= use_top_psms)) ? spectrum.getHits().end() : spectrum.getHits().begin() + use_top_psms;
+    for (; pepIt != pepItEnd; ++pepIt)
+    {
+      IDPointer pepPtr(&(*pepIt));
+      vertex_t pepV = addVertexWithLookup_(pepPtr, vertex_map);
+
+      for (auto const & proteinAcc : pepIt->extractProteinAccessionsSet())
+      {
+        // assumes protein is present
+        auto accToPHit = accession_map.find(std::string(proteinAcc));
+        if (accToPHit == accession_map.end())
+        {
+          LOG_WARN << "Warning: Building graph: skipping pep that maps to a non existent protein accession." << std::endl;
+          continue;
+        }
+        //TODO consider/calculate missing digests. Probably not here though!
+        //int missingTheorDigests = accToPHit->second->getMetaValue("missingTheorDigests");
+        //accToPHit->second->setMetaValue("missingTheorDigests", missingTheorDigests);
+
+        IDPointer prot(accToPHit->second);
+        vertex_t protV = addVertexWithLookup_(prot, vertex_map);
+        boost::add_edge(protV, pepV, g);
+      }
+    }
+  }
+
+  void IDBoostGraph::addPeptideAndAssociatedProteinsWithRunInfo_(
+      PeptideIdentification& spectrum,
+      unordered_map<unsigned, unsigned>& indexToPrefractionationGroup,
+      unordered_map<IDPointer, vertex_t, boost::hash<IDPointer>>& vertex_map,
+      unordered_map<std::string, ProteinHit*>& accession_map,
+      Size use_top_psms)
+  {
+    Size idx(0);
+    Size pfg(0);
+
+    if (spectrum.metaValueExists("map_index"))
+    {
+      idx = spectrum.getMetaValue("map_index");
+      pfg = indexToPrefractionationGroup[idx];
+      //TODO lookup run in the map built in the beginning
+      //TODO this check needs to be reworked with find()
+      if (pfg >= nrPrefractionationGroups_)
+      {
+        throw Exception::MissingInformation(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION,
+            "Reference (map_index) to non-existing run found at peptide ID."
+            " Sth went wrong during merging. Aborting.");
+      }
+    }
+    else
+    {
+      throw Exception::MissingInformation(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION,
+        "Trying to read run information (map_index) but none present at peptide ID."
+        " Did you annotate runs during merging? Aborting.");
+    }
+
+    //TODO add psm regularizer nodes here optionally if using multiple psms
+    auto pepIt = spectrum.getHits().begin();
+    //TODO sort or assume sorted
+    auto pepItEnd = use_top_psms == 0 || spectrum.getHits().empty() ? spectrum.getHits().end() : spectrum.getHits().begin() + use_top_psms;
+    for (; pepIt != pepItEnd; ++pepIt)
+    {
+      IDPointer pepPtr(&(*pepIt));
+      vertex_t pepV = addVertexWithLookup_(pepPtr, vertex_map);
+
+      //------- Only difference to the function without run info -----//
+      pepHitVtx_to_run_[pepV] = pfg;
+      //------- Only difference to the function without run info -----//
+
+      for (auto const & proteinAcc : pepIt->extractProteinAccessionsSet())
+      {
+        // assumes protein is present
+        auto accToPHit = accession_map.find(std::string(proteinAcc));
+        if (accToPHit == accession_map.end())
+        {
+          LOG_WARN << "Warning: Building graph: skipping pep that maps to a non existent protein accession." << std::endl;
+          continue;
+        }
+        //TODO consider/calculate missing digests. Probably not here though!
+        //int missingTheorDigests = accToPHit->second->getMetaValue("missingTheorDigests");
+        //accToPHit->second->setMetaValue("missingTheorDigests", missingTheorDigests);
+
+        IDPointer prot(accToPHit->second);
+        vertex_t protV = addVertexWithLookup_(prot, vertex_map);
+        boost::add_edge(protV, pepV, g);
+      }
+    }
+  }
+
   void IDBoostGraph::buildGraphWithRunInfo_(ProteinIdentification& proteins,
                                            ConsensusMap& cmap,
                                            Size use_top_psms,
@@ -255,70 +336,36 @@ namespace OpenMS
     }
 
     ProgressLogger pl;
+    Size roughNrIds = cmap.size();
+    if (use_unassigned_ids) roughNrIds += cmap.getUnassignedPeptideIdentifications().size();
     pl.setLogType(ProgressLogger::CMD);
-    pl.startProgress(0, cmap.size(), "Building graph...");
+    pl.startProgress(0, roughNrIds, "Building graph with run information...");
+    const String& protRun = proteins.getIdentifier();
     for (auto& feat : cmap)
     {
       for (auto& spectrum : feat.getPeptideIdentifications())
       {
-        Size idx(0);
-        Size pfg(0);
-        if (spectrum.getIdentifier() == proteins.getIdentifier())
+        if(spectrum.getIdentifier() == protRun)
         {
-          if (spectrum.metaValueExists("map_index"))
-          {
-            idx = spectrum.getMetaValue("map_index");
-            pfg = indexToPrefractionationGroup[idx];
-            //TODO lookup run in the map built in the beginning
-            if (pfg >= nrPrefractionationGroups_)
-            {
-              std::cout << "Warning: Reference to non-existing run found at peptide ID. Skipping." << std::endl;
-              continue;
-            }
-          }
-          else
-          {
-            std::cout << "Warning: Trying to read run information but none present at peptide ID. Skipping." << std::endl;
-            continue;
-          }
-        }
-        else
-        {
-          continue;
-        }
-
-        //TODO add psm regularizer nodes here optionally if using multiple psms
-        auto pepIt = spectrum.getHits().begin();
-        //TODO sort or assume sorted
-        auto pepItEnd = use_top_psms == 0 || spectrum.getHits().empty() ? spectrum.getHits().end() : spectrum.getHits().begin() + use_top_psms;
-        for (; pepIt != pepItEnd; ++pepIt)
-        {
-          IDPointer pepPtr(&(*pepIt));
-          vertex_t pepV = addVertexWithLookup_(pepPtr, vertex_map);
-          pepHitVtx_to_run_[pepV] = pfg;
-
-          for (auto const & proteinAcc : pepIt->extractProteinAccessionsSet())
-          {
-            // assumes protein is present
-            auto accToPHit = accession_map.find(std::string(proteinAcc));
-            if (accToPHit == accession_map.end())
-            {
-              std::cout << "Warning: Building graph: skipping pep that maps to a non existent protein accession." << std::endl;
-              continue;
-            }
-            //TODO consider/calculate missing digests. Probably not here though!
-            //int missingTheorDigests = accToPHit->second->getMetaValue("missingTheorDigests");
-            //accToPHit->second->setMetaValue("missingTheorDigests", missingTheorDigests);
-
-            IDPointer prot(accToPHit->second);
-            vertex_t protV = addVertexWithLookup_(prot, vertex_map);
-            boost::add_edge(protV, pepV, g);
-          }
+          addPeptideAndAssociatedProteinsWithRunInfo_(spectrum, proteins, indexToPrefractionationGroup,
+                                                      vertex_map, accession_map, use_top_psms);
         }
       }
       pl.nextProgress();
     }
 
+    if (use_unassigned_ids)
+    {
+      for (auto& id : cmap.getUnassignedPeptideIdentifications())
+      {
+        if(id.getIdentifier() == protRun)
+        {
+          addPeptideAndAssociatedProteinsWithRunInfo_(id, proteins, indexToPrefractionationGroup,
+                                                      vertex_map, accession_map, use_top_psms);
+        }
+        pl.nextProgress();
+      }
+    }
     pl.endProgress();
   }
 
@@ -350,101 +397,18 @@ namespace OpenMS
 
     ProgressLogger pl;
     pl.setLogType(ProgressLogger::CMD);
-    pl.startProgress(0, idedSpectra.size(), "Building graph...");
+    pl.startProgress(0, idedSpectra.size(), "Building graph with run info...");
+    const String& protRun = proteins.getIdentifier();
     for (auto& spectrum : idedSpectra)
     {
-      Size idx(0);
-      Size pfg(0);
-      if (spectrum.getIdentifier() == proteins.getIdentifier())
+      if (spectrum.getIdentifier() == protRun)
       {
-        if (spectrum.metaValueExists("map_index"))
-        {
-          idx = spectrum.getMetaValue("map_index");
-          pfg = indexToPrefractionationGroup[idx];
-          //TODO lookup run in the map built in the beginning
-          if (pfg >= nrPrefractionationGroups_)
-          {
-            std::cout << "Warning: Reference to non-existing run found at peptide ID. Skipping." << std::endl;
-            continue;
-          }
-        }
-        else
-        {
-          std::cout << "Warning: Trying to read run information but none present at peptide ID. Skipping." << std::endl;
-          continue;
-        }
-      }
-      else
-      {
-        continue;
-      }
-
-      //TODO add psm regularizer nodes here optionally if using multiple psms
-      auto pepIt = spectrum.getHits().begin();
-      //TODO sort or assume sorted
-      auto pepItEnd = use_top_psms == 0 || spectrum.getHits().empty() ? spectrum.getHits().end() : spectrum.getHits().begin() + use_top_psms;
-      for (; pepIt != pepItEnd; ++pepIt)
-      {
-        IDPointer pepPtr(&(*pepIt));
-        vertex_t pepV = addVertexWithLookup_(pepPtr, vertex_map);
-        pepHitVtx_to_run_[pepV] = pfg;
-
-        for (auto const & proteinAcc : pepIt->extractProteinAccessionsSet())
-        {
-          // assumes protein is present
-          auto accToPHit = accession_map.find(std::string(proteinAcc));
-          if (accToPHit == accession_map.end())
-          {
-            std::cout << "Warning: Building graph: skipping pep that maps to a non existent protein accession." << std::endl;
-            continue;
-          }
-          //TODO consider/calculate missing digests. Probably not here though!
-          //int missingTheorDigests = accToPHit->second->getMetaValue("missingTheorDigests");
-          //accToPHit->second->setMetaValue("missingTheorDigests", missingTheorDigests);
-
-          IDPointer prot(accToPHit->second);
-          vertex_t protV = addVertexWithLookup_(prot, vertex_map);
-          boost::add_edge(protV, pepV, g);
-        }
+        addPeptideAndAssociatedProteinsWithRunInfo_(spectrum, proteins, indexToPrefractionationGroup,
+                                                      vertex_map, accession_map, use_top_psms);
       }
       pl.nextProgress();
     }
     pl.endProgress();
-  }
-
-
-  void IDBoostGraph::addPeptideIDWithAssociatedProteins_(PeptideIdentification& spectrum,
-      unordered_map<IDPointer, vertex_t, boost::hash<IDPointer>>& vertex_map,
-      const unordered_map<string, ProteinHit*>& accession_map,
-      Size use_top_psms)
-  {
-    //TODO add psm regularizer nodes here optionally if using multiple psms (i.e. forcing them, so that only 1 or maybe 2 are present per spectrum)
-    auto pepIt = spectrum.getHits().begin();
-    //TODO sort or assume sorted
-    auto pepItEnd = (use_top_psms == 0 || (spectrum.getHits().size() <= use_top_psms)) ? spectrum.getHits().end() : spectrum.getHits().begin() + use_top_psms;
-    for (; pepIt != pepItEnd; ++pepIt)
-    {
-      IDPointer pepPtr(&(*pepIt));
-      vertex_t pepV = addVertexWithLookup_(pepPtr, vertex_map);
-
-      for (auto const & proteinAcc : pepIt->extractProteinAccessionsSet())
-      {
-        // assumes protein is present
-        auto accToPHit = accession_map.find(std::string(proteinAcc));
-        if (accToPHit == accession_map.end())
-        {
-          std::cout << "Warning: Building graph: skipping pep that maps to a non existent protein accession." << std::endl;
-          continue;
-        }
-        //TODO consider/calculate missing digests. Probably not here though!
-        //int missingTheorDigests = accToPHit->second->getMetaValue("missingTheorDigests");
-        //accToPHit->second->setMetaValue("missingTheorDigests", missingTheorDigests);
-
-        IDPointer prot(accToPHit->second);
-        vertex_t protV = addVertexWithLookup_(prot, vertex_map);
-        boost::add_edge(protV, pepV, g);
-      }
-    }
   }
 
   //TODO actually to build the graph, the inputs could be passed const. But if you want to do sth
@@ -471,7 +435,7 @@ namespace OpenMS
     const String& protRun = proteins.getIdentifier();
     for (auto& spectrum : idedSpectra)
     {
-      if(id.getIdentifier() == protRun)
+      if(spectrum.getIdentifier() == protRun)
       {
         addPeptideIDWithAssociatedProteins_(spectrum, vertex_map, accession_map, use_top_psms);
       }
@@ -512,7 +476,6 @@ namespace OpenMS
         {
           addPeptideIDWithAssociatedProteins_(id, vertex_map, accession_map, use_top_psms);
         }
-
       }
       pl.nextProgress();
     }
@@ -959,7 +922,8 @@ namespace OpenMS
     }
   }
 
-  void IDBoostGraph::resolveGraphProteinCentric_(const Graph& fg/*, bool resolveTies*/)
+  /* Under development
+  void IDBoostGraph::resolveGraphProteinCentric_(const Graph& fg)
   {
     Graph::vertex_iterator ui, ui_end;
     boost::tie(ui,ui_end) = boost::vertices(fg);
@@ -985,15 +949,18 @@ namespace OpenMS
     //for each:
     // go through peps and remove all incoming connections except the one to this
   }
+  */
 
   void IDBoostGraph::resolveGraphPeptideCentric_(Graph& fg/*, bool resolveTies*/)
   {
+    GetPosteriorVisitor gpv{};
     Graph::vertex_iterator ui, ui_end;
     boost::tie(ui,ui_end) = boost::vertices(fg);
 
     for (; ui != ui_end; ++ui)
     {
-      if (fg[*ui].which() == 2) // It should suffice to resolve at the pep cluster level
+      if (fg[*ui].which() == 2)
+        // It should suffice to resolve at the pep cluster level
         // if a pep does not belong to a cluster it didnt have multiple parents and
         // therefore does not need to be resolved
       {
@@ -1001,14 +968,20 @@ namespace OpenMS
         queue<vertex_t> start;
         start.push(*ui);
         getUpstreamNodesNonRecursive(start,fg,1,true,prots);
-        //TODO preinit the visitor?
-        auto score_compare = [&fg](vertex_t& n, vertex_t& m) -> bool
-            {return boost::apply_visitor(GetPosteriorVisitor{}, fg[n]) < boost::apply_visitor(GetPosteriorVisitor{}, fg[m]);};
-        auto max_v = std::max_element(prots.begin(), prots.end(), score_compare); //returns an iterator
+        auto score_compare = [&fg,&gpv](vertex_t& n, vertex_t& m) -> bool
+            {return boost::apply_visitor(gpv, fg[n]) < boost::apply_visitor(gpv, fg[m]);};
+        auto best_prot = std::max_element(prots.begin(), prots.end(), score_compare); //returns an iterator
         //TODO how to resolve ties
 
-        //TODO set scores of rest to zero and/or remove edges
-        //if the node is a group, find their members first.
+        for (const auto& prot : prots)
+        {
+          if (prot == *best_prot)
+          {
+            boost::remove_edge(prot, *ui, fg);
+          }
+        }
+        //TODO remove edges from ID structure as well?
+        // if the node is a group, find their members first.
       }
     }
 
@@ -1185,25 +1158,28 @@ namespace OpenMS
   }*/
 
   //needs run info annotated.
-  //TODO new idea! Create GraphExtendedType. Every CC can be a different kind of graph then
-  // and different functions work on different types or all types by templates
   void IDBoostGraph::clusterIndistProteinsAndPeptidesAndExtendGraph()
   {
+    if (nrPrefractionationGroups_ == 0)
+    {
+      throw Exception::MissingInformation(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION,
+          "Graph not built with run information!");
+    }
 
-    //TODO save this number during building!
-    Size nrReplicates = 1;
-
+    /* This should be taken care of. We require that it was built with runinfo here
     if (!pepHitVtx_to_run_.empty()) //graph built with run info
     {
       StringList runs;
       protIDs_.getPrimaryMSRunPath(runs);
       nrReplicates = runs.size();
     }
+     */
 
     pair<int,int> chargeRange = protIDs_.getSearchParameters().getChargeRange();
 
     if (ccs_.empty()) {
-      throw Exception::MissingInformation(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION, "No connected components annotated. Run computeConnectedComponents first!");
+      throw Exception::MissingInformation(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION,
+          "No connected components annotated. Run computeConnectedComponents first!");
     }
 
     // add_vertex and add_edge not threadsafe
@@ -1234,7 +1210,7 @@ namespace OpenMS
         // Cluster peptides with same sequence and create a replicate and charge hierarchy underneath
         for (; ui != ui_end; ++ui)
         {
-          SequenceToReplicateChargeVariantHierarchy hierarchy{nrReplicates, chargeRange.first, chargeRange.second};
+          SequenceToReplicateChargeVariantHierarchy hierarchy{nrPrefractionationGroups_, chargeRange.first, chargeRange.second};
           if (curr_cc[*ui].which() == 0) //protein: same seq peptideHits have to be at a single protein
           {
             Graph::adjacency_iterator adjIt, adjIt_end;
@@ -1247,6 +1223,9 @@ namespace OpenMS
                 PeptideHit *phitp = boost::get<PeptideHit *>(curr_cc[*adjIt]);
                 String seq = phitp->getSequence().toUnmodifiedString();
 
+                //TODO I think it is also best to completely focus on the extended Model here and assume that
+                // this information is present. If we allow mixtures of graphical models it gets complex
+                // with a lot of if-cases, also/especially during translation to the factor graph.
                 Size rep = 0; //In case no replicate info was read.
                 if (!pepHitVtx_to_run_.empty()) rep = pepHitVtx_to_run_[*adjIt];
                 int chg = phitp->getCharge();

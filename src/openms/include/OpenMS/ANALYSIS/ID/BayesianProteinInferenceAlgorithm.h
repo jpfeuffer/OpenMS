@@ -42,6 +42,7 @@
 #include <OpenMS/MATH/MISC/GridSearch.h>
 #include <vector>
 #include <functional>
+#include <boost/optional.hpp>
 
 namespace OpenMS
 {
@@ -49,6 +50,7 @@ namespace OpenMS
   class IDBoostGraph;
   class PeptideIdentification;
   class ProteinIdentification;
+  class ExperimentalDesign;
 
   class OPENMS_DLLAPI BayesianProteinInferenceAlgorithm :
       public DefaultParamHandler,
@@ -77,20 +79,21 @@ namespace OpenMS
     /// connected components
     class ExtendedGraphInferenceFunctor;
 
-    /// A function object to pass into the IDBoostGraph class to annotate and add
-    /// indistinguishable groups to the underlying ID objects based on the graph.
-    class AnnotateIndistGroupsFunctor;
-
     /// A function object to pass into the GridSearch;
     struct GridSearchEvaluator;
 
-    /// Perform inference. Writes its results into protein and (optionally) peptide hits (overwrites score).
-    /// Optionally adds indistinguishable protein groups with seperate scores, too.
+    /// Perform inference. Writes its results into protein and (optionally) peptide hits (new score).
+    /// Optionally adds indistinguishable protein groups with separate scores, too.
     /// Currently only takes first proteinID run.
     /// TODO loop over all runs
-    void inferPosteriorProbabilities(std::vector<ProteinIdentification>& proteinIDs, std::vector<PeptideIdentification>& peptideIDs);
+    void inferPosteriorProbabilities(
+        std::vector<ProteinIdentification>& proteinIDs,
+        std::vector<PeptideIdentification>& peptideIDs,
+        boost::optional<const ExperimentalDesign&> = boost::optional<const ExperimentalDesign&>());
 
-    void inferPosteriorProbabilities(ConsensusMap& cmap);
+    void inferPosteriorProbabilities(
+        ConsensusMap& cmap,
+        boost::optional<const ExperimentalDesign&> = boost::optional<const ExperimentalDesign&>());
 
   private:
 

@@ -307,7 +307,7 @@ namespace OpenMS
 
       // Everything else, do nothing for now
       template <class T>
-      double operator()(T& /*any node type*/, double /*posterior*/) const
+      double operator()(T& /*any node type*/) const
       {
         return -1.0;
       }
@@ -316,26 +316,18 @@ namespace OpenMS
 
     /// Constructors
     IDBoostGraph(ProteinIdentification& proteins,
-                  std::vector<PeptideIdentification>& idedSpectra,
-                  Size use_top_psms,
-                  bool use_run_info);
+                std::vector<PeptideIdentification>& idedSpectra,
+                Size use_top_psms,
+                bool use_run_info,
+                const boost::optional<const ExperimentalDesign&>& ed = boost::optional<const ExperimentalDesign&>());
 
     IDBoostGraph(ProteinIdentification& proteins,
-                  std::vector<PeptideIdentification>& idedSpectra,
-                  Size use_top_psms,
-                  const ExperimentalDesign& ed);
+                ConsensusMap& cmap,
+                Size use_top_psms,
+                bool use_run_info,
+                bool use_unassigned_ids,
+                const boost::optional<const ExperimentalDesign&>& ed = boost::optional<const ExperimentalDesign&>());
 
-    IDBoostGraph(ProteinIdentification& proteins,
-                 ConsensusMap& cmap,
-                 Size use_top_psms,
-                 bool use_run_info,
-                 bool use_unassigned_ids);
-
-    IDBoostGraph(ProteinIdentification& proteins,
-                 ConsensusMap& cmap,
-                 Size use_top_psms,
-                 bool use_unassigned_ids,
-                 const ExperimentalDesign& ed);
 
     /// Do sth on connected components (your functor object has to inherit from std::function or be a lambda)
     void applyFunctorOnCCs(const std::function<unsigned long(Graph&)>& functor);
@@ -435,7 +427,7 @@ namespace OpenMS
     /// a Prefractionation group (previously called run) is a unique combination
     /// of all non-fractionation related entries in the exp. design
     /// i.e. one (sub-)experiment before fractionation
-    Size nrPrefractionationGroups_;
+    Size nrPrefractionationGroups_ = 0;
 
     /* ----------------------------------------------------------- */
 
@@ -473,7 +465,13 @@ namespace OpenMS
         const std::unordered_map<std::string, ProteinHit*>& accession_map,
         Size use_top_psms);
 
-
+    void addPeptideAndAssociatedProteinsWithRunInfo_(
+        PeptideIdentification& spectrum,
+        unordered_map<unsigned, unsigned>& indexToPrefractionationGroup,
+        unordered_map<IDPointer, vertex_t, boost::hash<IDPointer>>& vertex_map,
+        unordered_map<std::string, ProteinHit*>& accession_map,
+        Size use_top_psms
+        );
 
     /// Initialize and store the graph. Also stores run information to later group
     /// peptides more efficiently.

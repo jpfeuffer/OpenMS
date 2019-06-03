@@ -584,6 +584,12 @@ namespace OpenMS
                        "Regularize the number of proteins that produce a peptide together (experimental, should be activated when using higher p-norms).");
     defaults_.setValidStrings("model_parameters:regularize",{"true","false"});
 
+    defaults_.setValue("model_parameters:extended_model",
+                       "false",
+                       "Uses information from different peptidoforms also across runs"
+                       " (automatically activated if an experimental design is given!)");
+    defaults_.setValidStrings("model_parameters:extended_model", {"true","false"});
+
     defaults_.addSection("loopy_belief_propagation","Settings for the loopy belief propagation algorithm.");
 
     defaults_.setValue("loopy_belief_propagation:scheduling_type",
@@ -718,12 +724,15 @@ namespace OpenMS
     proteinIDs.setHigherScoreBetter(true);
   }
 
-  void BayesianProteinInferenceAlgorithm::inferPosteriorProbabilities(ConsensusMap& cmap, bool use_run_info)
+  void BayesianProteinInferenceAlgorithm::inferPosteriorProbabilities(
+      ConsensusMap& cmap,
+      boost::optional<const ExperimentalDesign&> exp_des)
   {
     //TODO BIG filtering needs to account for run info if used
     cmap.applyFunctionOnPeptideIDs(checkConvertAndFilterPepHits);
     bool user_defined_priors = param_.getValue("user_defined_priors").toBool();
     bool use_unannotated_ids = param_.getValue("use_ids_outside_features").toBool();
+    bool use_run_info = param_.getValue("model_parameters:extended_model").toBool();
     Size nr_top_psms = static_cast<Size>(param_.getValue("top_PSMs"));
 
     FalseDiscoveryRate pepFDR;
@@ -750,7 +759,7 @@ namespace OpenMS
       // TODO try to calc AUC partial only (e.g. up to 5% FDR)
       LOG_INFO << "Peptide FDR AUC before protein inference: " << pepFDR.rocN(cmap, 0) << std::endl;
 
-      IDBoostGraph ibg(proteinIDs[0], cmap, nr_top_psms, use_run_info, use_unannotated_ids);
+      IDBoostGraph ibg(proteinIDs[0], cmap, nr_top_psms, use_run_info, use_unannotated_ids, exp_des);
       inferPosteriorProbabilities_(ibg);
       setScoreTypeAndSettings_(proteinIDs[0]);
 
@@ -782,8 +791,11 @@ namespace OpenMS
     }
   }
 
-  void BayesianProteinInferenceAlgorithm::inferPosteriorProbabilities_(IDBoostGraph& ibg, bool use_run_info)
+  void BayesianProteinInferenceAlgorithm::inferPosteriorProbabilities_(
+      IDBoostGraph& ibg)
   {
+    bool use_run_info = param_.getValue("model_parameters:extended_model").toBool();
+
     ibg.computeConnectedComponents();
     ibg.clusterIndistProteinsAndPeptides();
 
@@ -885,7 +897,8 @@ namespace OpenMS
 
   void BayesianProteinInferenceAlgorithm::inferPosteriorProbabilities(
       std::vector<ProteinIdentification>& proteinIDs,
-      std::vector<PeptideIdentification>& peptideIDs)
+      std::vector<PeptideIdentification>& peptideIDs,
+      boost::optional<const ExperimentalDesign&> exp_des)
   {
 
     //TODO The following is a sketch to think about how to include missing peptides
@@ -928,6 +941,8 @@ namespace OpenMS
 
     //TODO actually loop over all proteinID runs.
 
+    bool use_run_info = param_.getValue("model_parameters:extended_model").toBool();
+
     //TODO BIG filtering needs to account for run info if used
     std::for_each(peptideIDs.begin(),peptideIDs.end(),checkConvertAndFilterPepHits);
 
@@ -953,45 +968,11 @@ namespace OpenMS
 
     LOG_INFO << "Peptide FDR AUC before protein inference: " << pepFDR.rocN(peptideIDs, 0, proteinIDs[0].getIdentifier()) << std::endl;
 
-    IDBoostGraph ibg(proteinIDs[0], peptideIDs, nr_top_psms, use_run_info_or_expdes);
+    IDBoostGraph ibg(proteinIDs[0], peptideIDs, nr_top_psms, use_run_info, exp_des);
     inferPosteriorProbabilities_(ibg);
     setScoreTypeAndSettings_(proteinIDs[0]);
 
     LOG_INFO << "Peptide FDR AUC after protein inference: " << pepFDR.rocN(peptideIDs, 0, proteinIDs[0].getIdentifier()) << std::endl;
   }
 
-  void BayesianProteinInferenceAlgorithm::inferPosteriorProbabilities(
-      std::vector<ProteinIdentification>& proteinIDs,
-      std::vector<PeptideIdentification>& peptideIDs)
-  {
-    //TODO actually loop over all proteinID runs.
-
-    Size nr_top_psms = static_cast<Size>(param_.getValue("top_PSMs"));
-
-    FalseDiscoveryRate pepFDR;
-    Param p = pepFDR.getParameters();
-
-    // I think it is best to always use the best PSM only for comparing PSM FDR before-after
-    // since inference might change the ranking.
-    p.setValue("use_all_hits", "false");
-    pepFDR.setParameters(p);
-
-    bool user_defined_priors = param_.getValue("user_defined_priors").toBool();
-    if (user_defined_priors)
-    {
-      // Save current protein score into a metaValue
-      for (auto& prot_hit : proteinIDs[0].getHits())
-      {
-        prot_hit.setMetaValue("Prior", prot_hit.getScore());
-      }
-    }
-
-    LOG_INFO << "Peptide FDR AUC before protein inference: " << pepFDR.rocN(peptideIDs, 0, proteinIDs[0].getIdentifier()) << std::endl;
-
-    IDBoostGraph ibg(proteinIDs[0], peptideIDs, nr_top_psms, use_run_info_or_expdes);
-    inferPosteriorProbabilities_(ibg);
-    setScoreTypeAndSettings_(proteinIDs[0]);
-
-    LOG_INFO << "Peptide FDR AUC after protein inference: " << pepFDR.rocN(peptideIDs, 0, proteinIDs[0].getIdentifier()) << std::endl;
-  }
 }

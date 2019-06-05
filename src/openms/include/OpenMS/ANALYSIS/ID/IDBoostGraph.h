@@ -467,9 +467,9 @@ namespace OpenMS
 
     void addPeptideAndAssociatedProteinsWithRunInfo_(
         PeptideIdentification& spectrum,
-        unordered_map<unsigned, unsigned>& indexToPrefractionationGroup,
-        unordered_map<IDPointer, vertex_t, boost::hash<IDPointer>>& vertex_map,
-        unordered_map<std::string, ProteinHit*>& accession_map,
+        std::unordered_map<unsigned, unsigned>& indexToPrefractionationGroup,
+        std::unordered_map<IDPointer, vertex_t, boost::hash<IDPointer>>& vertex_map,
+        std::unordered_map<std::string, ProteinHit*>& accession_map,
         Size use_top_psms
         );
 

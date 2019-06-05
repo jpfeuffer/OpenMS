@@ -178,7 +178,6 @@ namespace OpenMS
     }
   }
 
-
   unordered_map<unsigned, unsigned> convertMapLabelFree_(
       const map<pair<String, unsigned>, unsigned>& fileToRun,
       const StringList& files)
@@ -347,7 +346,7 @@ namespace OpenMS
       {
         if(spectrum.getIdentifier() == protRun)
         {
-          addPeptideAndAssociatedProteinsWithRunInfo_(spectrum, proteins, indexToPrefractionationGroup,
+          addPeptideAndAssociatedProteinsWithRunInfo_(spectrum, indexToPrefractionationGroup,
                                                       vertex_map, accession_map, use_top_psms);
         }
       }
@@ -360,7 +359,7 @@ namespace OpenMS
       {
         if(id.getIdentifier() == protRun)
         {
-          addPeptideAndAssociatedProteinsWithRunInfo_(id, proteins, indexToPrefractionationGroup,
+          addPeptideAndAssociatedProteinsWithRunInfo_(id, indexToPrefractionationGroup,
                                                       vertex_map, accession_map, use_top_psms);
         }
         pl.nextProgress();
@@ -403,7 +402,7 @@ namespace OpenMS
     {
       if (spectrum.getIdentifier() == protRun)
       {
-        addPeptideAndAssociatedProteinsWithRunInfo_(spectrum, proteins, indexToPrefractionationGroup,
+        addPeptideAndAssociatedProteinsWithRunInfo_(spectrum, indexToPrefractionationGroup,
                                                       vertex_map, accession_map, use_top_psms);
       }
       pl.nextProgress();

@@ -655,36 +655,40 @@ namespace OpenMS
     updateMembers_();
 
     //Note: this function can be changed, e.g. when we want to do a extremum removal etc. beforehand
-    //TODO test performance of getting the probability cutoff everytime.
+    //TODO test performance of getting the probability cutoff everytime vs capture free lambda
     double probability_cutoff = param_.getValue("psm_probability_cutoff");
-    checkConvertAndFilterPepHits = [probability_cutoff](PeptideIdentification& pep_id){
-      String score_l = pep_id.getScoreType();
-      score_l = score_l.toLower();
-      if (score_l == "pep" || score_l == "posterior error probability")
-      {
-        for (auto &pep_hit : pep_id.getHits())
+    checkConvertAndFilterPepHits_ = [probability_cutoff](PeptideIdentification& pep_id/*, const String& run_id*/)
+    {
+      //if (pep_id.getIdentifier() == run_id)
+      //{
+        String score_l = pep_id.getScoreType();
+        score_l = score_l.toLower();
+        if (score_l == "pep" || score_l == "posterior error probability")
         {
-          double newScore = 1. - pep_hit.getScore();
-          pep_hit.setScore(newScore);
+          for (auto &pep_hit : pep_id.getHits())
+          {
+            double newScore = 1. - pep_hit.getScore();
+            pep_hit.setScore(newScore);
+          }
+          pep_id.setScoreType("Posterior Probability");
+          pep_id.setHigherScoreBetter(true);
+          //TODO remove hits "on-the-go"?
+          IDFilter::removeMatchingItems(pep_id.getHits(),
+                                        [&probability_cutoff](PeptideHit& hit){ return hit.getScore() <= probability_cutoff;});
         }
-        pep_id.setScoreType("Posterior Probability");
-        pep_id.setHigherScoreBetter(true);
-        //TODO remove hits "on-the-go"?
-        IDFilter::removeMatchingItems(pep_id.getHits(),
-            [&probability_cutoff](PeptideHit& hit){ return hit.getScore() <= probability_cutoff;});
-      }
-      else
-      {
-        if (score_l != "Posterior Probability")
+        else
         {
-          throw OpenMS::Exception::InvalidParameter(
-              __FILE__,
-              __LINE__,
-              OPENMS_PRETTY_FUNCTION,
-              "Epifany needs Posterior (Error) Probabilities in the Peptide Hits. Use Percolator with PEP score"
-              "or run IDPosteriorErrorProbability first.");
+          if (score_l != "Posterior Probability")
+          {
+            throw OpenMS::Exception::InvalidParameter(
+                __FILE__,
+                __LINE__,
+                OPENMS_PRETTY_FUNCTION,
+                "Epifany needs Posterior (Error) Probabilities in the Peptide Hits. Use Percolator with PEP score"
+                "or run IDPosteriorErrorProbability first.");
+          }
         }
-      }
+      //}
     };
   }
 
@@ -729,7 +733,7 @@ namespace OpenMS
       boost::optional<const ExperimentalDesign&> exp_des)
   {
     //TODO BIG filtering needs to account for run info if used
-    cmap.applyFunctionOnPeptideIDs(checkConvertAndFilterPepHits);
+    cmap.applyFunctionOnPeptideIDs(checkConvertAndFilterPepHits_);
     bool user_defined_priors = param_.getValue("user_defined_priors").toBool();
     bool use_unannotated_ids = param_.getValue("use_ids_outside_features").toBool();
     bool use_run_info = param_.getValue("model_parameters:extended_model").toBool();
@@ -944,7 +948,7 @@ namespace OpenMS
     bool use_run_info = param_.getValue("model_parameters:extended_model").toBool();
 
     //TODO BIG filtering needs to account for run info if used
-    std::for_each(peptideIDs.begin(),peptideIDs.end(),checkConvertAndFilterPepHits);
+    std::for_each(peptideIDs.begin(), peptideIDs.end(), checkConvertAndFilterPepHits_);
 
     Size nr_top_psms = static_cast<Size>(param_.getValue("top_PSMs"));
 

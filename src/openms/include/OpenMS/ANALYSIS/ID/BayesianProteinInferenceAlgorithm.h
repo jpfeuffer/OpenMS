@@ -105,7 +105,7 @@ namespace OpenMS
         std::vector<double>& gamma_search
         );
 
-    std::function<void(PeptideIdentification&)> checkConvertAndFilterPepHits;
+    std::function<void(PeptideIdentification&/*, const String& run_id*/)> checkConvertAndFilterPepHits_;
 
     /// The grid search object initialized with a default grid
     GridSearch<double,double,double> grid{{0.008,0.032,0.128},{0.001},{0.5}};

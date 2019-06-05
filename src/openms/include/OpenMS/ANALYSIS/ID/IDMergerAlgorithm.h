@@ -62,7 +62,7 @@ namespace OpenMS
 
   private:
     String getNewIdentifier_() const;
-    void copySearchParams_(ProteinIdentification& from, ProteinIdentification& to);
+    static void copySearchParams_(ProteinIdentification& from, ProteinIdentification& to);
 
     /// Checks consistency of search engines and settings across runs before merging.
     /// @param protRuns The runs to check (first = implicit reference)

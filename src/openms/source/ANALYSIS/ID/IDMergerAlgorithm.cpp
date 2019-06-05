@@ -39,6 +39,9 @@
 using namespace std;
 namespace OpenMS
 {
+  //TODO parameterize so it only adds/keeps best per peptide, peptide charge, modpeptide
+  // How? Maybe keep a map here about the best scores and lookup before adding and update and insert only if better
+  // proteins of this peptide could be skipped (if we assume same database as we do currently, it has to be there already)
   IDMergerAlgorithm::IDMergerAlgorithm(const String& runIdentifier) :
       IDMergerAlgorithm::DefaultParamHandler("IDMergerAlgorithm"),
       protResult(),
@@ -147,6 +150,8 @@ namespace OpenMS
             "Annotation of origin requested during merge, but no origin present in run "
             + protRun.getIdentifier() + ".");
       }
+      //TODO this will make multiple runs from the same file appear multiple times.
+      // should be ok but check all possibilities at some point
       originFiles.push_back(toFill);
       for (String& f : toFill)
       {
@@ -212,7 +217,7 @@ namespace OpenMS
           if (it.second) // was newly inserted
           {
             protResult.getHits().emplace_back(std::move(*oldProtRuns[oldProtRunIdx].findHit(acc)));
-          }
+          } // else it was there already
         }
       }
       //move peptides into right vector

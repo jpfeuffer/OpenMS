@@ -365,12 +365,22 @@ namespace OpenMS
     }
   }
 
-  /// get the file path to the first MS run
+  /// get the file path to the first MS runs
   void ProteinIdentification::getPrimaryMSRunPath(StringList& toFill) const
   {
     if (this->metaValueExists("spectra_data"))
     {
       toFill = this->getMetaValue("spectra_data");
+    }
+  }
+
+  /// get the file path to the first MS runs
+  void ProteinIdentification::getPrimaryMSRunPath(set<String>& toFill) const
+  {
+    if (this->metaValueExists("spectra_data"))
+    {
+      const auto& strlist = this->getMetaValue("spectra_data").toStringList();
+      toFill = set<String>(strlist.begin(),strlist.end());
     }
   }
 

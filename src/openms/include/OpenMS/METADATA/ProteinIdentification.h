@@ -386,6 +386,7 @@ public:
     void setPrimaryMSRunPath(const StringList& s);
     /// get the file path to the first MS run
     void getPrimaryMSRunPath(StringList& toFill) const;
+    void getPrimaryMSRunPath(std::set<String> &toFill) const;
     /// if this object has inference data
     bool hasInferenceData() const;
     bool hasInferenceEngineAsSearchEngine() const;

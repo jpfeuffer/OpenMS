@@ -496,6 +496,12 @@ namespace OpenMS
     protein_identifications_ = protein_identifications;
   }
 
+  /// sets the protein identifications
+  void ConsensusMap::setProteinIdentifications(std::vector<ProteinIdentification>&& protein_identifications)
+  {
+    protein_identifications_ = std::move(protein_identifications);
+  }
+
   /// non-mutable access to the unassigned peptide identifications
   const std::vector<PeptideIdentification>& ConsensusMap::getUnassignedPeptideIdentifications() const
   {
@@ -537,11 +543,10 @@ namespace OpenMS
   {
     if (s.empty())
     {
-      LOG_WARN << "Setting empty MS runs paths. Expected " + String(column_description_.size()) << std::endl;
+      LOG_WARN << "Setting empty MS runs paths. Expected one for each map. Resulting ConsensusMap contains " + String(column_description_.size()) + " maps." << std::endl;
       for (auto & cd : column_description_)
       {
-        LOG_WARN << "Setting empty MS runs paths. Expected " + String(column_description_.size()) << std::endl;
-        cd.second.filename = "UKNOWN";
+        cd.second.filename = "UNKNOWN";
        }
     } 
     else if (!column_description_.empty() && s.size() != column_description_.size())

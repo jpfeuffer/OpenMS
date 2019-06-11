@@ -17,6 +17,7 @@ ConsensusIDAlgorithmPEPMatrix.h
 ConsensusIDAlgorithmRanks.h
 ConsensusIDAlgorithmSimilarity.h
 ConsensusIDAlgorithmWorst.h
+ConsensusMapMergerAlgorithm.h
 FalseDiscoveryRate.h
 HiddenMarkovModel.h
 IDBoostGraph.h

@@ -17,6 +17,7 @@ ConsensusIDAlgorithmPEPMatrix.cpp
 ConsensusIDAlgorithmRanks.cpp
 ConsensusIDAlgorithmSimilarity.cpp
 ConsensusIDAlgorithmWorst.cpp
+ConsensusMapMergerAlgorithm.cpp
 FalseDiscoveryRate.cpp
 HiddenMarkovModel.cpp
 IDBoostGraph.cpp

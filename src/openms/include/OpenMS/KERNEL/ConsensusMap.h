@@ -267,6 +267,9 @@ public:
     /// sets the protein identifications
     OPENMS_DLLAPI void setProteinIdentifications(const std::vector<ProteinIdentification>& protein_identifications);
 
+    /// sets the protein identifications by moving
+    OPENMS_DLLAPI void setProteinIdentifications(std::vector<ProteinIdentification>&& protein_identifications);
+
     /// non-mutable access to the unassigned peptide identifications
     OPENMS_DLLAPI const std::vector<PeptideIdentification>& getUnassignedPeptideIdentifications() const;
 

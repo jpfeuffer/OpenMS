@@ -53,8 +53,10 @@ namespace OpenMS
 
     /// Insert (=move and clear) a run with its peptide IDs into the internal merged data structures,
     /// based on the initial mapping from fileorigins to new run
-    void insertRun(std::vector<ProteinIdentification>& prots,
-        std::vector<PeptideIdentification>& peps);
+    void insertRun(std::vector<ProteinIdentification>&& prots,
+        std::vector<PeptideIdentification>&& peps);
+    void insertRun(const std::vector<ProteinIdentification>& prots,
+                   const std::vector<PeptideIdentification>& peps);
 
     /// Return the merged results and reset/clear all internal data
     void returnResultsAndClear(ProteinIdentification& prots,
@@ -62,7 +64,7 @@ namespace OpenMS
 
   private:
     String getNewIdentifier_() const;
-    static void copySearchParams_(ProteinIdentification& from, ProteinIdentification& to);
+    static void copySearchParams_(const ProteinIdentification& from, ProteinIdentification& to);
 
     /// Checks consistency of search engines and settings across runs before merging.
     /// @param protRuns The runs to check (first = implicit reference)
@@ -86,13 +88,38 @@ namespace OpenMS
 
 
     void movePepIDsAndRefProteinsToResult_(
-        std::vector<PeptideIdentification>& pepIDs,
-        std::vector<ProteinIdentification>& oldProtRuns
+        std::vector<PeptideIdentification>&& pepIDs,
+        std::vector<ProteinIdentification>&& oldProtRuns
+    );
+
+    void insertProteinIDs_(
+        std::vector<ProteinIdentification>&& oldProtRuns
+    );
+
+    void updateAndMovePepIDs_(
+        std::vector<PeptideIdentification>&& pepIDs,
+        const std::map<String, Size>& runIDToRunIdx,
+        const std::vector<StringList>& originFiles,
+        bool annotate_origin
+    );
+
+    void movePepIDsAndRefProteinsToResultFaster_(
+        std::vector<PeptideIdentification>&& pepIDs,
+        std::vector<ProteinIdentification>&& oldProtRuns
     );
 
     ProteinIdentification protResult;
     std::vector<PeptideIdentification> pepResult;
     std::unordered_set<std::string> proteinsCollected;
+    static size_t accessionHash(const ProteinHit& p){
+      return std::hash<String>()(p.getAccession());
+    }
+    static bool accessionEqual(const ProteinHit& p1, const ProteinHit& p2){
+      return p1.getAccession() == p2.getAccession();
+    }
+    using hash_type = std::size_t (*)(const ProteinHit&);
+    using equal_type = bool (*)(const ProteinHit&, const ProteinHit&);
+    std::unordered_set<ProteinHit, hash_type, equal_type> proteinsCollectedHits;
     bool filled = false;
     std::map<String, Size> fileOriginToIdx;
     String id;

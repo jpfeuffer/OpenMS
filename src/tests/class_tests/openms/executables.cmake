@@ -431,6 +431,7 @@ set(analysis_executables_list
   ConsensusMapNormalizerAlgorithmThreshold_test
   ConsensusMapNormalizerAlgorithmMedian_test
   ConsensusMapNormalizerAlgorithmQuantile_test
+  ConsensusMapMergerAlgorithm_test
   #DataAccessHelper_test
   DeNovoAlgorithm_test
   DeNovoIdentification_test
@@ -446,7 +447,9 @@ set(analysis_executables_list
   FeatureGroupingAlgorithm_test
   FeatureHandle_test
   HiddenMarkovModel_test
+  IDBoostGraph_test
   IDMapper_test
+  IDMergerAlgorithm_test
   IDRipper_test
   ILPDCWrapper_test
   IncludeExcludeTarget_test

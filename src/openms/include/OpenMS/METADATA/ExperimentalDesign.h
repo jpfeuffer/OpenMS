@@ -118,6 +118,10 @@ namespace OpenMS
       // Get set of all samples that are present in the sample section
       std::set< unsigned > getSamples() const;
 
+      // Add a sample as the last row
+      void addSample(unsigned sample, const std::vector<String>& content = {});
+
+      // TODO should it include the Sample ID column or not??
       // Get set of all factors (column names) that were defined for the sample section
       std::set< String > getFactors() const;
 

@@ -84,6 +84,7 @@ namespace OpenMS
       
       // Note: consensus elements of the same fraction group corresponds to one sample abundance
       ExperimentalDesign::MSFileSection msfile_section;
+      ExperimentalDesign::SampleSection sample_section;
 
       Size fraction_groups_assigned(0);
 
@@ -136,13 +137,18 @@ namespace OpenMS
         }
         else // MS1 or MS2 labeled
         {
-          r.sample = r.label;
+          r.sample = r.label; //TODO why??
         }
 
         msfile_section.push_back(r);
+        if (!sample_section.hasSample(r.sample))
+          sample_section.addSample(r.sample);
+
+
       }
 
       experimental_design.setMSFileSection(msfile_section);
+      experimental_design.setSampleSection(sample_section);
       LOG_DEBUG << "Experimental design (ConsensusMap derived):\n"
                << "  Files: " << experimental_design.getNumberOfMSFiles()
                << "  Fractions: " << experimental_design.getNumberOfFractions()
@@ -150,6 +156,14 @@ namespace OpenMS
                << "  Samples: " << experimental_design.getNumberOfSamples() << "\n"
                << endl;
       return experimental_design;
+    }
+
+    void ExperimentalDesign::SampleSection::addSample(unsigned sample, const vector<String>& content)
+    {
+      //TODO warn when already present? Overwrite?
+      //TODO check content size
+      sample_to_rowindex_.emplace(sample, sample_to_rowindex_.size());
+      content_.push_back(content);
     }
 
     ExperimentalDesign ExperimentalDesign::fromFeatureMap(const FeatureMap &fm)
@@ -310,7 +324,7 @@ namespace OpenMS
     map<vector<String>, set<unsigned>> ExperimentalDesign::getConditionToSampleMapping() const
     {
       const auto& facset = sample_section_.getFactors();
-      assert(!facset.empty());
+      // assert(!facset.empty()); // not needed: If no factors are given, same condition is assumed for every run
       set<String> nonRepFacs{};
 
       for (const String& fac : facset)

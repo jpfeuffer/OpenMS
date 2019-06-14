@@ -374,6 +374,35 @@ namespace OpenMS
     }
   }
 
+  void ProteinIdentification::addPrimaryMSRunPath(const StringList& toAdd)
+  {
+    if (this->metaValueExists("spectra_data"))
+    {
+      StringList tmp = this->getMetaValue("spectra_data");
+      tmp.insert(tmp.end(),toAdd.begin(),toAdd.end());
+      this->setMetaValue("spectra_data", DataValue(tmp));
+    }
+    else
+    {
+      this->setMetaValue("spectra_data", DataValue(toAdd));
+    }
+  }
+
+
+  void ProteinIdentification::addPrimaryMSRunPath(const String& toAdd)
+  {
+    if (this->metaValueExists("spectra_data"))
+    {
+      StringList tmp = this->getMetaValue("spectra_data");
+      tmp.push_back(toAdd);
+      this->setMetaValue("spectra_data", DataValue(tmp));
+    }
+    else
+    {
+      this->setMetaValue("spectra_data", DataValue(toAdd));
+    }
+  }
+
   /// get the file path to the first MS runs
   void ProteinIdentification::getPrimaryMSRunPath(set<String>& toFill) const
   {

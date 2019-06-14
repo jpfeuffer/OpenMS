@@ -48,7 +48,7 @@ namespace OpenMS
       IDMergerAlgorithm::DefaultParamHandler("IDMergerAlgorithm"),
       protResult(),
       pepResult(),
-      proteinsCollectedHits(0,accessionHash,accessionEqual),
+      //proteinsCollectedHits(0,accessionHash,accessionEqual),
       id(runIdentifier)
   {
     defaults_.setValue("annotate_origin",
@@ -114,7 +114,7 @@ namespace OpenMS
       //Without any exp. design we assume label-free for checking mods
       checkOldRunConsistency_(prots, this->protResult, "label-free");
     }
-    movePepIDsAndRefProteinsToResult_(std::move(pep), std::move(pr));
+    movePepIDsAndRefProteinsToResultFaster_(std::move(pep), std::move(pr));
   }
 
   void IDMergerAlgorithm::returnResultsAndClear(
@@ -132,7 +132,7 @@ namespace OpenMS
     protResult.setPrimaryMSRunPath(newOrigins);
     std::swap(prots, protResult);
     std::swap(peps, pepResult);
-    //reset so the new result is usable right away
+    //reset so the new this class is reuseable
     protResult = ProteinIdentification{};
     protResult.setIdentifier(getNewIdentifier_());
     //clear, if user gave non-empty vector
@@ -140,7 +140,10 @@ namespace OpenMS
     //reset internals
     fileOriginToIdx.clear();
     proteinsCollected.clear();
-    proteinsCollectedHits.clear();
+
+    //for (ProteinHit p : proteinsCollectedHits)
+    //  prots.getHits().push_back(std::move(p));
+    //proteinsCollectedHits.clear();
   }
 
   String IDMergerAlgorithm::getNewIdentifier_() const
@@ -154,18 +157,38 @@ namespace OpenMS
     return id + String(buffer.data());
   }
 
-  void IDMergerAlgorithm::insertProteinIDs_(
+  /*
+  void IDMergerAlgorithm::insertProteinIDsWithSetOfHits_(
       vector<ProteinIdentification>&& oldProtRuns
   )
   {
     typedef std::vector<ProteinHit>::iterator iter_t;
-    for(auto& protRun : oldProtRuns) //TODO check run ID when option is added
+    for (auto& protRun : oldProtRuns) //TODO check run ID when option is added
     {
       auto& hits = protRun.getHits();
       proteinsCollectedHits.insert(
           std::move_iterator<iter_t>(hits.begin()),
           std::move_iterator<iter_t>(hits.end())
       );
+      hits.clear();
+    }
+  }
+   */
+
+  void IDMergerAlgorithm::insertProteinIDs_(
+      vector<ProteinIdentification>&& oldProtRuns
+  )
+  {
+    for (auto& protRun : oldProtRuns) //TODO check run ID when option is added
+    {
+      auto& hits = protRun.getHits();
+      for(auto& hit : hits)
+      {
+        if (proteinsCollected.emplace(hit.getAccession()).second)
+        {
+          protResult.getHits().push_back(std::move(hit));
+        }
+      }
       hits.clear();
     }
   }
@@ -186,13 +209,16 @@ namespace OpenMS
 
       if (runIdxIt == runIDToRunIdx.end())
       {
+        //This is an easy way to just merge peptides from a certain run
+        continue;
+        /*
         throw Exception::MissingInformation(
             __FILE__,
             __LINE__,
             OPENMS_PRETTY_FUNCTION,
             "Old IdentificationRun not found for PeptideIdentification "
             "(" + String(pid.getMZ()) + ", " + String(pid.getRT()) + ").");
-
+        */
       }
 
       bool annotated = pid.metaValueExists("map_index");
@@ -215,7 +241,17 @@ namespace OpenMS
                 "(" + String(pid.getMZ()) + ", " + String(pid.getRT()) + ") but"
                                                                          "no old map_index present");
           }
-        pid.setMetaValue("map_index", fileOriginToIdx[originFiles[runIdxIt->second].at(oldFileIdx)]);
+        if (oldFileIdx >= originFiles[runIdxIt->second].size())
+        {
+          throw Exception::MissingInformation(
+              __FILE__,
+              __LINE__,
+              OPENMS_PRETTY_FUNCTION,
+              "Trying to annotate new map_index for PeptideIdentification "
+              "(" + String(pid.getMZ()) + ", " + String(pid.getRT()) + ") but"
+              " the index exceeds the number of files in the run.");
+        }
+        pid.setMetaValue("map_index", fileOriginToIdx[originFiles[runIdxIt->second][oldFileIdx]]);
       }
       pid.setIdentifier(protResult.getIdentifier());
       //move peptides into right vector
@@ -224,7 +260,7 @@ namespace OpenMS
   }
 
 
-  // this merges without checking the existence of a parent protein for the PEptideHits
+  // this merges without checking the existence of a parent protein for the PeptideHits
   // therefore it can merge peptides and proteins separately and a bit faster.
   void IDMergerAlgorithm::movePepIDsAndRefProteinsToResultFaster_(
       vector<PeptideIdentification>&& pepIDs,
@@ -266,6 +302,8 @@ namespace OpenMS
 
     updateAndMovePepIDs_(std::move(pepIDs), runIDToRunIdx, originFiles, annotate_origin);
     insertProteinIDs_(std::move(oldProtRuns));
+    pepIDs.clear();
+    oldProtRuns.clear();
   }
 
   void IDMergerAlgorithm::movePepIDsAndRefProteinsToResult_(
@@ -363,6 +401,8 @@ namespace OpenMS
       //move peptides into right vector
       pepResult.emplace_back(std::move(pid));
     }
+    pepIDs.clear();
+    oldProtRuns.clear();
   }
 
   void IDMergerAlgorithm::copySearchParams_(const ProteinIdentification& from, ProteinIdentification& to)
@@ -393,8 +433,8 @@ namespace OpenMS
       if (idRun.getSearchEngine() != engine || idRun.getSearchEngineVersion() != version)
       {
         ok = false;
-        LOG_WARN << "Search engine " + idRun.getSearchEngine() + "from IDRun " + String(runID) + " does not match "
-                                                                                                 "with the others. You probably do not want to merge the results with this tool.";
+        LOG_WARN << "Search engine " + idRun.getSearchEngine() + " from IDRun " + String(runID) + " does not match "
+        "with the others. You probably do not want to merge the results with this tool." << std::endl;
         break;
       }
       const ProteinIdentification::SearchParameters& sp = idRun.getSearchParameters();
@@ -410,7 +450,7 @@ namespace OpenMS
       {
         ok = false;
         LOG_WARN << "Searchengine settings from IDRun " + String(runID) + " does not match with the others."
-                                                                          " You probably do not want to merge the results with this tool if they differ significantly.";
+        " You probably do not want to merge the results with this tool if they differ significantly." << std::endl;
         break;
       }
 
@@ -423,7 +463,8 @@ namespace OpenMS
         {
           ok = false;
           LOG_WARN << "Used modification settings from IDRun " + String(runID) + " does not match with the others."
-                                                                                 " Since the experiment is not annotated as MS1-labeled you probably do not want to merge the results with this tool.";
+          " Since the experiment is not annotated as MS1-labeled "
+          "you probably do not want to merge the results with this tool." << std::endl;
           break;
         }
         else
@@ -433,7 +474,8 @@ namespace OpenMS
           //TODO actually you would probably need an experimental design here, because
           //settings have to agree exactly in a FractionGroup but can slightly differ across runs.
           LOG_WARN << "Used modification settings from IDRun " + String(runID) + " does not match with the others."
-                                                                                 " Although it seems to be an MS1-labeled experiment, check carefully that only non-labelling mods differ.";
+          " Although it seems to be an MS1-labeled experiment,"
+          " check carefully that only non-labelling mods differ." << std::endl;
         }
       }
     }

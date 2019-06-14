@@ -40,7 +40,7 @@ using namespace std;
 
 START_TEST(IDBoostGraph, "$Id$")
 
-    START_SECTION(IDBoostGraph())
+    START_SECTION(IDMergerAlgorithm())
     {
 
     }

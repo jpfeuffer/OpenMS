@@ -254,15 +254,14 @@ namespace OpenMS
     if (spectrum.metaValueExists("map_index"))
     {
       idx = spectrum.getMetaValue("map_index");
-      pfg = indexToPrefractionationGroup[idx];
-      //TODO lookup run in the map built in the beginning
-      //TODO this check needs to be reworked with find()
-      if (pfg >= nrPrefractionationGroups_)
+      auto find_it = indexToPrefractionationGroup.find(idx);
+      if (find_it == indexToPrefractionationGroup.end())
       {
         throw Exception::MissingInformation(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION,
             "Reference (map_index) to non-existing run found at peptide ID."
             " Sth went wrong during merging. Aborting.");
       }
+      pfg = find_it->second;
     }
     else
     {
@@ -380,6 +379,8 @@ namespace OpenMS
       proteins.getPrimaryMSRunPath(files);
       map<pair<String, unsigned>, unsigned> fileLabelToPrefractionationGroup = ed.getPathLabelToPrefractionationMapping(false);
       nrPrefractionationGroups_ = fileLabelToPrefractionationGroup.size();
+      //TODO if only given proteins and peptide IDs we automatically assume label-free since I don't know
+      // where the label would be stored.
       indexToPrefractionationGroup = convertMapLabelFree_(fileLabelToPrefractionationGroup, files); // convert to index in the peptide ids
     }
 
@@ -1551,6 +1552,18 @@ namespace OpenMS
     sizes_and_times_.resize(ccs_.size());
     #endif
     g.clear();
+  }
+
+  const IDBoostGraph::Graph& IDBoostGraph::getComponent(Size cc)
+  {
+    if (cc == 0 && boost::num_vertices(g) != 0)
+    {
+      return g;
+    }
+    else
+    {
+      return ccs_.at(cc);
+    }
   }
 
   IDBoostGraph::vertex_t IDBoostGraph::addVertexWithLookup_(IDPointer& ptr, unordered_map<IDPointer, vertex_t, boost::hash<IDPointer>>& vertex_map)

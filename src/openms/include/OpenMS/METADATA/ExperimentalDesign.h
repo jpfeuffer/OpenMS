@@ -177,10 +177,12 @@ namespace OpenMS
     std::map<unsigned, unsigned> getSampleToPrefractionationMapping() const;
 
     /// return fraction index to file paths (ordered by fraction_group)
+    //TODO this probably needs a basename parameter to be fully compatible with the other mappings!! Implicit full path.
     std::map<unsigned int, std::vector<String> > getFractionToMSFilesMapping() const;
 
     /// return vector of filepath/label combinations that share the same conditions after removing
     /// replicate columns in the sample section (e.g. for merging across replicates)
+    //TODO this probably needs a basename parameter to be fully compatible with the other mappings!! Implicit full path.
     std::vector<std::vector<std::pair<String, unsigned>>> getConditionToPathLabelVector() const;
 
     /// return a condition (unique combination of sample section values except replicate) to Sample index mapping

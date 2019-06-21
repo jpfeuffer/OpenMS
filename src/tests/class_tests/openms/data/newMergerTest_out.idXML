@@ -8,7 +8,7 @@
 		<VariableModification name="Glu-&gt;pyro-Glu (N-term E)" />
 	</SearchParameters>
 	<IdentificationRun date="0000-00-00T00:00:00" search_engine="XTandem" search_engine_version="" search_parameters_ref="SP_0" >
-		<ProteinIdentification score_type="" higher_score_better="true" significance_threshold="0" >
+		<ProteinIdentification score_type="" higher_score_better="false" significance_threshold="0" >
 			<ProteinHit id="PH_0" accession="A" score="0.258519381284714" sequence="" >
 				<UserParam type="string" name="target_decoy" value="target"/>
 				<UserParam type="float" name="XTandem_score" value="0"/>
@@ -33,25 +33,29 @@
 			</ProteinHit>
 			<UserParam type="stringList" name="spectra_data" value="[file:///C:\c1f1r1.mzML,file:///C:\c1f1r2.mzML]"/>
 		</ProteinIdentification>
-		<PeptideIdentification score_type="Mascot" higher_score_better="true" significance_threshold="31.8621" MZ="0" RT="0" >
-			<PeptideHit score="0.6" sequence="STFDFYQRRLVTLAESPRAPSP" charge="2" aa_before="K [" aa_after="G ]" start="227 4" end="248 25" protein_refs="PH_0 PH_1" >
+		<PeptideIdentification score_type="Posterior Error Probability" higher_score_better="false" significance_threshold="31.8621" MZ="0" RT="0" >
+			<PeptideHit score="0.4" sequence="STFDFYQRRLVTLAESPRAPSP" charge="2" aa_before="K [" aa_after="G ]" start="227 4" end="248 25" protein_refs="PH_0 PH_1" >
+				<UserParam type="string" name="target_decoy" value="decoy"/>
 			</PeptideHit>
 			<PeptideHit score="0.5" sequence="EDQSCPSERRRAFSRLRFGPS" charge="2" aa_before="[" aa_after="]" start="0" end="20" protein_refs="PH_2" >
+				<UserParam type="string" name="target_decoy" value="target"/>
 			</PeptideHit>
-			<PeptideHit score="0.4" sequence="EWATYTCVLGFHVYVPVR" charge="2" aa_before="[" aa_after="]" start="0" end="17" protein_refs="PH_3" >
+			<PeptideHit score="0.6" sequence="EWATYTCVLGFHVYVPVR" charge="2" aa_before="[" aa_after="]" start="0" end="17" protein_refs="PH_3" >
+				<UserParam type="string" name="target_decoy" value="decoy"/>
 			</PeptideHit>
 			<UserParam type="int" name="map_index" value="0"/>
 		</PeptideIdentification>
-		<PeptideIdentification score_type="Mascot" higher_score_better="true" significance_threshold="31.8621" MZ="0" RT="0" >
-			<PeptideHit score="0.8" sequence="EWATYTCVLGFHVYVPVR" charge="2" aa_before="[" aa_after="]" start="0" end="17" protein_refs="PH_3" >
+		<PeptideIdentification score_type="Posterior Error Probability" higher_score_better="false" significance_threshold="31.8621" MZ="0" RT="0" >
+			<PeptideHit score="0.2" sequence="EWATYTCVLGFHVYVPVR" charge="2" aa_before="[" aa_after="]" start="0" end="17" protein_refs="PH_3" >
+				<UserParam type="string" name="target_decoy" value="target"/>
 			</PeptideHit>
-			<PeptideHit score="0.7" sequence="NIEMATCHED" charge="2" >
+			<PeptideHit score="0.3" sequence="NIEMATCHED" charge="2" >
 				<UserParam type="string" name="protein_references" value="unmatched"/>
 			</PeptideHit>
 			<UserParam type="int" name="map_index" value="0"/>
 		</PeptideIdentification>
-		<PeptideIdentification score_type="Mascot" higher_score_better="true" significance_threshold="31.8621" MZ="0" RT="0" >
-			<PeptideHit score="0.6" sequence="LVTLAESPRAPSP" charge="2" aa_before="K [" aa_after="G ]" start="227 4" end="248 25" protein_refs="PH_3 PH_4" >
+		<PeptideIdentification score_type="Posterior Error Probability" higher_score_better="false" significance_threshold="31.8621" MZ="0" RT="0" >
+			<PeptideHit score="0.4" sequence="LVTLAESPRAPSP" charge="2" aa_before="K [" aa_after="G ]" start="227 4" end="248 25" protein_refs="PH_3 PH_4" >
 				<UserParam type="string" name="target_decoy" value="target"/>
 				<UserParam type="string" name="protein_references" value="non-unique"/>
 			</PeptideHit>
@@ -61,9 +65,9 @@
 			</PeptideHit>
 			<UserParam type="int" name="map_index" value="1"/>
 		</PeptideIdentification>
-		<PeptideIdentification score_type="Mascot" higher_score_better="true" significance_threshold="31.8621" MZ="0" RT="0" >
-			<PeptideHit score="0.9" sequence="FIANGE" charge="2" aa_before="D" aa_after="R" start="1" end="6" protein_refs="PH_5" >
-				<UserParam type="string" name="target_decoy" value="decoy"/>
+		<PeptideIdentification score_type="Posterior Error Probability" higher_score_better="false" significance_threshold="31.8621" MZ="0" RT="0" >
+			<PeptideHit score="0.1" sequence="FIANGE" charge="2" aa_before="D" aa_after="R" start="1" end="6" protein_refs="PH_5" >
+				<UserParam type="string" name="target_decoy" value="target"/>
 				<UserParam type="string" name="protein_references" value="unique"/>
 			</PeptideHit>
 			<UserParam type="int" name="map_index" value="1"/>

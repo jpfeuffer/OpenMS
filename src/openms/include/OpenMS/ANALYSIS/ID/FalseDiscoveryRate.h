@@ -326,7 +326,8 @@ private:
         std::vector<std::pair<double,bool>>& scores_labels,
         const HitType & hit) const
     {
-        getScores_(scores_labels, hit);
+        checkTDAnnotation_(hit);
+        scores_labels.emplace_back(hit.getScore(), getTDLabel_(hit));
     }
 
     template<typename IDType, typename std::enable_if<IsIDType<IDType>::value>::type* = nullptr>

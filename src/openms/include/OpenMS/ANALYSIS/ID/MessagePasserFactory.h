@@ -95,9 +95,9 @@ public:
 
 template <typename L>
 MessagePasserFactory<L>::MessagePasserFactory(double alpha_, double beta_, double gamma_, double p_, double pep_prior_) {
-  assert(0. < alpha_ && alpha_ < 1.);
-  assert(0. < beta_ && beta_ < 1.);
-  assert(0. < gamma_ && gamma_ < 1.);
+  assert(0. <= alpha_ && alpha_ <= 1.);
+  assert(0. <= beta_ && beta_ <= 1.);
+  assert(0. <= gamma_ && gamma_ <= 1.);
   //Note: smaller than 1 might be possible but is untested right now.
   assert(p_ >= 1.);
   assert(0. < pep_prior_ && pep_prior_ < 1.);

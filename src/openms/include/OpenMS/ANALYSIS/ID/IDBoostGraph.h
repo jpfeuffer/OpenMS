@@ -364,6 +364,8 @@ namespace OpenMS
     /// Zero means the graph was not split yet
     Size getNrConnectedComponents();
 
+    const Graph& getComponent(Size cc);
+
     ProteinIdentification& getProteinIDs();
 
     //TODO docu

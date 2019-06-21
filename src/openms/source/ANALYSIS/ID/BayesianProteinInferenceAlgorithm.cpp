@@ -98,8 +98,8 @@ namespace OpenMS
    */
 
   /// A functor that specifies what to do on a connected component (IDBoostGraph::FilteredGraph)
-  class BayesianProteinInferenceAlgorithm::GraphInferenceFunctor :
-      public std::function<unsigned long(IDBoostGraph::Graph&)>
+  class BayesianProteinInferenceAlgorithm::GraphInferenceFunctor /*:
+      public std::function<unsigned long(IDBoostGraph::Graph&)> */
   {
   public:
     //TODO think about restructuring params (we do not need every param from the BPI class here.
@@ -315,8 +315,8 @@ namespace OpenMS
   };
 
   /// A functor that specifies what to do on a connected component (IDBoostGraph::FilteredGraph)
-  class BayesianProteinInferenceAlgorithm::ExtendedGraphInferenceFunctor :
-      public std::function<unsigned long(IDBoostGraph::Graph&)>
+  class BayesianProteinInferenceAlgorithm::ExtendedGraphInferenceFunctor /* :
+      public std::function<unsigned long(IDBoostGraph::Graph&)> */
   {
   public:
     const Param& param_;
@@ -476,11 +476,11 @@ namespace OpenMS
 
     double operator() (double alpha, double beta, double gamma)
     {
-      std::cout << "Evaluating: " << alpha << " " << beta << " " << gamma << std::endl;
+      LOG_INFO << "Evaluating: " << alpha << " " << beta << " " << gamma << std::endl;
       param_.setValue("model_parameters:prot_prior", gamma);
       param_.setValue("model_parameters:pep_emission", alpha);
       param_.setValue("model_parameters:pep_spurious_emission", beta);
-      const GraphInferenceFunctor& gif {const_cast<const Param&>(param_), debug_lvl_};
+      GraphInferenceFunctor gif {param_, debug_lvl_};
       ibg_.applyFunctorOnCCs(gif);
       FalseDiscoveryRate fdr;
       Param fdrparam = fdr.getParameters();
@@ -608,7 +608,7 @@ namespace OpenMS
     defaults_.setValue("loopy_belief_propagation:convergence_threshold",
                        1e-5,
                        "Initial threshold under which MSE difference a message is considered to be converged.");
-    defaults_.setMinFloat("loopy_belief_propagation:convergence_threshold", 1e-7);
+    defaults_.setMinFloat("loopy_belief_propagation:convergence_threshold", 1e-9);
     defaults_.setMaxFloat("loopy_belief_propagation:convergence_threshold", 1.0);
 
     defaults_.setValue("loopy_belief_propagation:dampening_lambda",
@@ -653,54 +653,59 @@ namespace OpenMS
     // write defaults into Param object param_
     defaultsToParam_();
     updateMembers_();
+   }
 
+  void BayesianProteinInferenceAlgorithm::updateMembers_()
+  {
     //Note: this function can be changed, e.g. when we want to do a extremum removal etc. beforehand
     //TODO test performance of getting the probability cutoff everytime vs capture free lambda
     double probability_cutoff = param_.getValue("psm_probability_cutoff");
-    checkConvertAndFilterPepHits_ = [probability_cutoff](PeptideIdentification& pep_id/*, const String& run_id*/)
+    checkConvertAndFilterPepHits_ = [probability_cutoff](PeptideIdentification &pep_id/*, const String& run_id*/)
     {
       //if (pep_id.getIdentifier() == run_id)
       //{
-        String score_l = pep_id.getScoreType();
-        score_l = score_l.toLower();
-        if (score_l == "pep" || score_l == "posterior error probability")
+      String score_l = pep_id.getScoreType();
+      score_l = score_l.toLower();
+      if (score_l == "pep" || score_l == "posterior error probability")
+      {
+        for (auto &pep_hit : pep_id.getHits())
         {
-          for (auto &pep_hit : pep_id.getHits())
-          {
-            double newScore = 1. - pep_hit.getScore();
-            pep_hit.setScore(newScore);
-          }
-          pep_id.setScoreType("Posterior Probability");
-          pep_id.setHigherScoreBetter(true);
-          //TODO remove hits "on-the-go"?
-          IDFilter::removeMatchingItems(pep_id.getHits(),
-                                        [&probability_cutoff](PeptideHit& hit){ return hit.getScore() <= probability_cutoff;});
+          double newScore = 1. - pep_hit.getScore();
+          pep_hit.setScore(newScore);
         }
-        else
+        pep_id.setScoreType("Posterior Probability");
+        pep_id.setHigherScoreBetter(true);
+        //TODO remove hits "on-the-go"?
+        IDFilter::removeMatchingItems(pep_id.getHits(),
+                                      [&probability_cutoff](PeptideHit &hit)
+                                      { return hit.getScore() <= probability_cutoff; });
+      }
+      else
+      {
+        if (score_l != "Posterior Probability")
         {
-          if (score_l != "Posterior Probability")
-          {
-            throw OpenMS::Exception::InvalidParameter(
-                __FILE__,
-                __LINE__,
-                OPENMS_PRETTY_FUNCTION,
-                "Epifany needs Posterior (Error) Probabilities in the Peptide Hits. Use Percolator with PEP score"
-                "or run IDPosteriorErrorProbability first.");
-          }
+          throw OpenMS::Exception::InvalidParameter(
+              __FILE__,
+              __LINE__,
+              OPENMS_PRETTY_FUNCTION,
+              "Epifany needs Posterior (Error) Probabilities in the Peptide Hits. Use Percolator with PEP score"
+              " or run IDPosteriorErrorProbability first.");
         }
+      }
       //}
     };
   }
 
 
 /* TODO under construction: mode based on theoretical digest
-  void BayesianProteinInferenceAlgorithm::inferPosteriorProbabilities(
+  void BayesianProteinInferenceAlgorithm::inferPosteriorProbabilities
+  (
       ConsensusMap cmap,
       const ExperimentalDesign& expDesign,
       const String& db,
       const ProteaseDigestion pd,
       ProteinIdentification& proteinIds
-      )
+  )
   {
     proteinIds.getHits().clear();
 
@@ -720,7 +725,7 @@ namespace OpenMS
     //pi.run<FASTAContainer<TFI_File>>(fastaDB, singletonProteinId, pepIdConcatReplicates);
 */
 
-  void setScoreTypeAndSettings_(ProteinIdentification& proteinIDs)
+  void BayesianProteinInferenceAlgorithm::setScoreTypeAndSettings_(ProteinIdentification& proteinIDs)
   {
     proteinIDs.setScoreType("Posterior Probability");
     proteinIDs.setInferenceEngine("Epifany");
@@ -734,6 +739,7 @@ namespace OpenMS
   {
     //TODO BIG filtering needs to account for run info if used
     cmap.applyFunctionOnPeptideIDs(checkConvertAndFilterPepHits_);
+    //TODO BIG filter empty PeptideIDs afterwards
     bool user_defined_priors = param_.getValue("user_defined_priors").toBool();
     bool use_unannotated_ids = param_.getValue("use_ids_outside_features").toBool();
     bool use_run_info = param_.getValue("model_parameters:extended_model").toBool();
@@ -786,9 +792,9 @@ namespace OpenMS
         //TODO try to calc AUC partial only (e.g. up to 5% FDR)
         LOG_INFO << "Peptide FDR AUC before protein inference: " << pepFDR.rocN(cmap, 0, proteinID.getIdentifier()) << std::endl;
 
+        setScoreTypeAndSettings_(proteinID);
         IDBoostGraph ibg(proteinID, cmap, nr_top_psms, use_run_info, use_unannotated_ids);
         inferPosteriorProbabilities_(ibg);
-        setScoreTypeAndSettings_(proteinID);
 
         LOG_INFO << "Peptide FDR AUC after protein inference: " << pepFDR.rocN(cmap, 0, proteinID.getIdentifier()) << std::endl;
       }
@@ -824,12 +830,12 @@ namespace OpenMS
     //TODO think about running grid search on the small CCs only (maybe it's enough)
     if (gs.getNrCombos() > 1)
     {
-      std::cout << "Testing " << gs.getNrCombos() << " param combinations." << std::endl;
+      LOG_INFO << "Testing " << gs.getNrCombos() << " param combinations." << std::endl;
       /*double res =*/ gs.evaluate(GridSearchEvaluator(param_, ibg, debug_lvl_), -1.0, bestParams);
     }
     else
     {
-      std::cout << "Only one combination specified: Skipping grid search." << std::endl;
+      LOG_INFO << "Only one combination specified: Skipping grid search." << std::endl;
     }
 
     double bestGamma = gamma_search[bestParams[2]];
@@ -844,15 +850,15 @@ namespace OpenMS
     param_.setValue("update_PSM_probabilities", update_PSM_probabilities ? "true" : "false");
     param_.setValue("annotate_group_probabilities", annotate_group_posteriors ? "true" : "false");
 
-    if (use_run_info)
+    if (!use_run_info)
     {
-      const GraphInferenceFunctor& gif {const_cast<const Param&>(param_), debug_lvl_};
+      GraphInferenceFunctor gif {param_, debug_lvl_};
       ibg.applyFunctorOnCCs(gif);
     }
     else
     {
       //TODO under construction
-      const ExtendedGraphInferenceFunctor& gif {const_cast<const Param&>(param_)};
+      ExtendedGraphInferenceFunctor gif {param_};
       ibg.applyFunctorOnCCs(gif);
     }
 
@@ -949,6 +955,7 @@ namespace OpenMS
 
     //TODO BIG filtering needs to account for run info if used
     std::for_each(peptideIDs.begin(), peptideIDs.end(), checkConvertAndFilterPepHits_);
+    IDFilter::removeEmptyIdentifications(peptideIDs);
 
     Size nr_top_psms = static_cast<Size>(param_.getValue("top_PSMs"));
 
@@ -972,9 +979,9 @@ namespace OpenMS
 
     LOG_INFO << "Peptide FDR AUC before protein inference: " << pepFDR.rocN(peptideIDs, 0, proteinIDs[0].getIdentifier()) << std::endl;
 
+    setScoreTypeAndSettings_(proteinIDs[0]);
     IDBoostGraph ibg(proteinIDs[0], peptideIDs, nr_top_psms, use_run_info, exp_des);
     inferPosteriorProbabilities_(ibg);
-    setScoreTypeAndSettings_(proteinIDs[0]);
 
     LOG_INFO << "Peptide FDR AUC after protein inference: " << pepFDR.rocN(peptideIDs, 0, proteinIDs[0].getIdentifier()) << std::endl;
   }

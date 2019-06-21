@@ -63,10 +63,12 @@ namespace OpenMS
     /// Destructor
     ~BayesianProteinInferenceAlgorithm() override = default;
 
+    void updateMembers_() override;
+
     //Note: How to perform group inference
     // Three options:
-    // -(implemented) use the automatically created indist. groups and report their posterior
-    // - collapse proteins to groups beforehand and run inference (can be done additionally)
+    // - (as implemented) use the automatically created indist. groups and report their posterior
+    // - (can be done additionally) collapse proteins to groups beforehand and run inference
     // - (if no single protein scores wanted at all) calculate prior from proteins for the group
     //  beforehand and remove proteins from network (saves computation
     //  because messages are not passed from prots to groups anymore.
@@ -104,6 +106,8 @@ namespace OpenMS
         std::vector<double>& beta_search,
         std::vector<double>& gamma_search
         );
+
+    void setScoreTypeAndSettings_(ProteinIdentification& proteinIDs);
 
     std::function<void(PeptideIdentification&/*, const String& run_id*/)> checkConvertAndFilterPepHits_;
 

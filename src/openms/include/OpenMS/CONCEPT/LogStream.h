@@ -447,29 +447,29 @@ private:
   } // namespace Logger
 
   /// Macro to be used if fatal error are reported (processing stops)
-#define LOG_FATAL_ERROR \
-  OPENMS_THREAD_CRITICAL(oms_log) \
+#define OPENMS_LOG_FATAL_ERROR \
+  OPENMS_THREAD_CRITICAL(LOGSTREAM) \
   OpenMS_Log_fatal << __FILE__ << "(" << __LINE__ << "): "
 
   /// Macro to be used if non-fatal error are reported (processing continues)
-#define LOG_ERROR \
-  OPENMS_THREAD_CRITICAL(oms_log) \
+#define OPENMS_LOG_ERROR \
+  OPENMS_THREAD_CRITICAL(LOGSTREAM) \
   OpenMS_Log_error
 
   /// Macro if a warning, a piece of information which should be read by the user, should be logged
-#define LOG_WARN \
-  OPENMS_THREAD_CRITICAL(oms_log) \
-  Log_warn
+#define OPENMS_LOG_WARN \
+  OPENMS_THREAD_CRITICAL(LOGSTREAM) \
+  OpenMS_Log_warn
 
   /// Macro if a information, e.g. a status should be reported
-#define LOG_INFO \
-  OPENMS_THREAD_CRITICAL(oms_log) \
-  Log_info
+#define OPENMS_LOG_INFO \
+  OPENMS_THREAD_CRITICAL(LOGSTREAM) \
+  OpenMS_Log_info
 
   /// Macro for general debugging information
-#define LOG_DEBUG \
-  OPENMS_THREAD_CRITICAL(oms_log) \
-  Log_debug << __FILE__ << "(" << __LINE__ << "): "
+#define OPENMS_LOG_DEBUG \
+  OPENMS_THREAD_CRITICAL(LOGSTREAM) \
+  OpenMS_Log_debug << __FILE__ << "(" << __LINE__ << "): "
 
   OPENMS_DLLAPI extern Logger::LogStream OpenMS_Log_fatal; ///< Global static instance of a LogStream to capture messages classified as fatal errors. By default it is bound to @b cerr.
   OPENMS_DLLAPI extern Logger::LogStream OpenMS_Log_error; ///< Global static instance of a LogStream to capture messages classified as errors. By default it is bound to @b cerr.

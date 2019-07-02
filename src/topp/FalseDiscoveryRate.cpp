@@ -121,9 +121,23 @@ protected:
     registerDoubleOption_("FDR:PSM", "<fraction>", 1, "Filter PSMs based on q-value (e.g., 0.05 = 5% FDR, disabled for 1)", false);
     setMinFloat_("FDR:PSM", 0);
     setMaxFloat_("FDR:PSM", 1);
+
     registerDoubleOption_("FDR:protein", "<fraction>", 1, "Filter proteins based on q-value (e.g., 0.05 = 5% FDR, disabled for 1)", false);
     setMinFloat_("FDR:protein", 0);
     setMaxFloat_("FDR:protein", 1);
+
+    registerTOPPSubsection_("FDR:cleanup", "Cleanup references after FDR control");
+    registerStringOption_("FDR:cleanup:remove_proteins_without_psms","<choice>", "true",
+        "Remove proteins without PSMs (due to being decoy or below PSM FDR threshold).", false, true);
+    setValidStrings_("FDR:cleanup:remove_proteins_without_psms", {"true","false"});
+    registerStringOption_("FDR:cleanup:remove_psms_without_proteins","<choice>", "true",
+        "Remove PSMs without proteins (due to being decoy or below protein FDR threshold).", false, true);
+    setValidStrings_("FDR:cleanup:remove_psms_without_proteins", {"true","false"});
+    registerStringOption_("FDR:cleanup:remove_spectra_without_psms","<choice>", "true",
+        "Remove spectra without PSMs (due to being decoy or below protein FDR threshold)."
+        " Caution: if remove_psms_without_proteins is false, protein level filtering does not propagate.", false, true);
+    setValidStrings_("FDR:cleanup:remove_spectra_without_psms", {"true","false"});
+
     registerSubsection_("algorithm", "Parameter section for the FDR calculation algorithm");
   }
 
@@ -175,8 +189,8 @@ protected:
               __LINE__,
               OPENMS_PRETTY_FUNCTION,
               "It seems like protein inference was not yet performed."
-              "Calculating Protein FDR is probably not meaningful. To override,"
-              "use the force flag.");
+              " Calculating Protein FDR is probably not meaningful. To override,"
+              " use the force flag.");
           }
           else
           {
@@ -199,36 +213,39 @@ protected:
         if (psm_fdr < 1)
         {      
           LOG_INFO << "FDR control: Filtering PSMs..." << endl;
+          LOG_INFO << "FDR control: Filtering PSMs..." << endl;
           IDFilter::filterHitsByScore(pep_ids, psm_fdr);
         }
       }
     }
-    catch (Exception::MissingInformation)
+    catch (Exception::MissingInformation& e)
     {
-      LOG_FATAL_ERROR << "FalseDiscoveryRate failed due to missing information (see above).\n";
+      LOG_FATAL_ERROR << "FalseDiscoveryRate failed due to missing information:\n"
+      << e.getMessage();
       return INCOMPATIBLE_INPUT_DATA;
     }
 
     if (filter_applied)
     {
-      IDFilter::removeUnreferencedProteins(prot_ids, pep_ids);
-
-      //TODO Julianus: I am not sure if the following does what the param describes
-
-      // keep decoy peptide hits without decoy protein references if flag is specified
-      if (alg_param.getValue("add_decoy_peptides").toBool())
+      //remove_proteins_without_psms
+      if (getStringOption_("FDR:cleanup:remove_proteins_without_psms") == "true")
       {
-        IDFilter::updateProteinReferences(pep_ids, prot_ids, false);
+        IDFilter::removeUnreferencedProteins(prot_ids, pep_ids);
       }
-      else
+      //remove_psms_without_proteins
+      IDFilter::updateProteinReferences(pep_ids,
+                                        prot_ids,
+                                        getStringOption_("FDR:cleanup:remove_psms_without_proteins") == "true");
+      //remove_spectra_without_psms
+      if (getStringOption_("FDR:cleanup:remove_spectra_without_psms") == "true")
       {
-        IDFilter::updateProteinReferences(pep_ids, prot_ids, true);
+        IDFilter::removeEmptyIdentifications(pep_ids);
       }
 
       IDFilter::updateHitRanks(prot_ids);
       IDFilter::updateHitRanks(pep_ids);
-      IDFilter::removeEmptyIdentifications(pep_ids);
-      // we want to keep "empty" protein IDs because they contain search meta data
+
+      // we want to keep "empty" protein ID runs because they contain search meta data
     }
 
     // update protein groupings if necessary:

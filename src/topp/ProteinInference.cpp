@@ -77,10 +77,12 @@ using namespace std;
 </CENTER>
 
     This tool counts and aggregates the scores of peptide sequences that match a protein accession. Only the top PSM for a peptide is used.
+    By default it also annotates the number of peptides used for the calculation (metavalue "nr_found_peptides") and
+    can be used for further filtering. 0 probability peptides are counted but ignored in aggregation method "multiplication".
 
     @note Currently mzIdentML (mzid) is not directly supported as an input/output format of this tool. Convert mzid files to/from idXML using @ref TOPP_IDFileConverter if necessary.
 
-    @todo Integrate Top x support, integrate parsimony approach from @ref OpenMS::PSProteinInference class
+    @todo possibly integrate parsimony approach from @ref OpenMS::PSProteinInference class
     <B>The command line parameters of this tool are:</B>
     @verbinclude TOPP_ProteinInference.cli
     <B>INI file documentation of this tool:</B>
@@ -118,6 +120,12 @@ protected:
         " either for reporting or for group based quant. later. Only works with a single ID run in the file.", false);
     setValidStrings_("annotate_indist_groups", ListUtils::create<String>("true,false"));
 
+    // If we support more psms per spectrum, it should be done in the Algorithm class first
+    /*registerIntOption_("nr_psms_per_spectrum", "<choice>", 1,
+                          "The number of top scoring PSMs per spectrum to consider. 0 means all.", false);
+    setMinInt_("nr_psms_per_spectrum", 0);*/
+
+
     addEmptyLine_();
 
     Param merger_with_subsection;
@@ -143,6 +151,11 @@ protected:
     // load identifications
 
     std::cout << "Loading input..." << std::endl;
+    //TODO allow keep_best_pepmatch_only option during merging (Peptide-level datastructure would help a lot,
+    // otherwise you need to build a map of peptides everytime you want to quickly check if the peptide is already
+    // present. If )
+    //TODO allow experimental design aware merging
+    //TODO allow consensusXML version
     IDMergerAlgorithm merger{String("all_merged")};
 
     vector<ProteinIdentification> inferred_protein_ids{1};
@@ -184,8 +197,8 @@ protected:
       }
       //TODO you could actually also do the aggregation/inference as well as the resolution on the Graph structure
       // but it is quite fast right now.
-      IDBoostGraph ibg{inferred_protein_ids[0], inferred_peptide_ids};
-      ibg.buildGraph(0);
+      IDBoostGraph ibg{inferred_protein_ids[0], inferred_peptide_ids, 1
+                       /*static_cast<Size>(getIntOption_("nr_psms_per_spectrum"))*/, false};
       sw.start();
       //TODO allow computation without splitting into components. Might be worthwhile in some cases
       std::cout << "Splitting into connected components..." << std::endl;

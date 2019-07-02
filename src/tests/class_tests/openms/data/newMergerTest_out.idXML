@@ -36,18 +36,22 @@
 		<PeptideIdentification score_type="Posterior Error Probability" higher_score_better="false" significance_threshold="31.8621" MZ="0" RT="0" >
 			<PeptideHit score="0.4" sequence="STFDFYQRRLVTLAESPRAPSP" charge="2" aa_before="K [" aa_after="G ]" start="227 4" end="248 25" protein_refs="PH_0 PH_1" >
 				<UserParam type="string" name="target_decoy" value="decoy"/>
+				<UserParam type="string" name="protein_references" value="non-unique"/>
 			</PeptideHit>
 			<PeptideHit score="0.5" sequence="EDQSCPSERRRAFSRLRFGPS" charge="2" aa_before="[" aa_after="]" start="0" end="20" protein_refs="PH_2" >
 				<UserParam type="string" name="target_decoy" value="target"/>
+				<UserParam type="string" name="protein_references" value="unique"/>
 			</PeptideHit>
 			<PeptideHit score="0.6" sequence="EWATYTCVLGFHVYVPVR" charge="2" aa_before="[" aa_after="]" start="0" end="17" protein_refs="PH_3" >
 				<UserParam type="string" name="target_decoy" value="decoy"/>
+				<UserParam type="string" name="protein_references" value="unique"/>
 			</PeptideHit>
 			<UserParam type="int" name="map_index" value="0"/>
 		</PeptideIdentification>
 		<PeptideIdentification score_type="Posterior Error Probability" higher_score_better="false" significance_threshold="31.8621" MZ="0" RT="0" >
 			<PeptideHit score="0.2" sequence="EWATYTCVLGFHVYVPVR" charge="2" aa_before="[" aa_after="]" start="0" end="17" protein_refs="PH_3" >
 				<UserParam type="string" name="target_decoy" value="target"/>
+				<UserParam type="string" name="protein_references" value="unique"/>
 			</PeptideHit>
 			<PeptideHit score="0.3" sequence="NIEMATCHED" charge="2" >
 				<UserParam type="string" name="protein_references" value="unmatched"/>
@@ -61,7 +65,7 @@
 			</PeptideHit>
 			<PeptideHit score="0.5" sequence="EDQRRAFSRLRFGPS" charge="2" aa_before="[" aa_after="]" start="0" end="20" protein_refs="PH_1" >
 				<UserParam type="string" name="target_decoy" value="target+decoy"/>
-				<UserParam type="string" name="protein_references" value="non-unique"/>
+				<UserParam type="string" name="protein_references" value="unique"/>
 			</PeptideHit>
 			<UserParam type="int" name="map_index" value="1"/>
 		</PeptideIdentification>

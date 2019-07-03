@@ -120,7 +120,7 @@ namespace OpenMS
         }
         else
         { // no fractions and fraction group information annotated, deduce from data
-          LOG_INFO << "No fractions annotated in consensusXML. Assuming unfractionated." << endl;
+          OPENMS_LOG_INFO << "No fractions annotated in consensusXML. Assuming unfractionated." << endl;
           r.fraction = 1;
 
           // no fractions -> one fraction group for each MS file
@@ -149,7 +149,7 @@ namespace OpenMS
 
       experimental_design.setMSFileSection(msfile_section);
       experimental_design.setSampleSection(sample_section);
-      LOG_DEBUG << "Experimental design (ConsensusMap derived):\n"
+      OPENMS_LOG_DEBUG << "Experimental design (ConsensusMap derived):\n"
                << "  Files: " << experimental_design.getNumberOfMSFiles()
                << "  Fractions: " << experimental_design.getNumberOfFractions()
                << "  Labels: " << experimental_design.getNumberOfLabels()
@@ -192,7 +192,7 @@ namespace OpenMS
 
       ExperimentalDesign::MSFileSection rows(1, r);
       experimental_design.setMSFileSection(rows);
-      LOG_INFO << "Experimental design (FeatureMap derived):\n"
+      OPENMS_LOG_INFO << "Experimental design (FeatureMap derived):\n"
                << "  files: " << experimental_design.getNumberOfMSFiles()
                << "  fractions: " << experimental_design.getNumberOfFractions()
                << "  labels: " << experimental_design.getNumberOfLabels()
@@ -233,7 +233,7 @@ namespace OpenMS
         ++sample;
       }
       experimental_design.setMSFileSection(rows);
-      LOG_INFO << "Experimental design (Identification derived):\n"
+      OPENMS_LOG_INFO << "Experimental design (Identification derived):\n"
                << "  files: " << experimental_design.getNumberOfMSFiles()
                << "  fractions: " << experimental_design.getNumberOfFractions()
                << "  labels: " << experimental_design.getNumberOfLabels()
@@ -595,7 +595,7 @@ namespace OpenMS
 
       for (const MSFileSectionEntry& row : msfile_section_)
       {
-        // FRACTIONGROUP__FRACTION_LABEL TUPLE
+        // FRACTIONGROUP_FRACTION_LABEL TUPLE
         std::tuple<unsigned, unsigned, unsigned> fractiongroup_fraction_label = std::make_tuple(row.fraction_group, row.fraction, row.label);
         errorIfAlreadyExists(
           fractiongroup_fraction_label_set,
@@ -615,11 +615,13 @@ namespace OpenMS
 
         if (fractiongroup_label_to_sample[fractiongroup_label].size() > 1)
         {
-          throw Exception::MissingInformation(
-            __FILE__,
-            __LINE__,
-            OPENMS_PRETTY_FUNCTION,
-            "Multiple Samples encountered for the same fraction group and the same label");
+
+         OPENMS_LOG_INFO << "Please correct your experimental design if this is a label free experiment." << std::endl;
+         // throw Exception::MissingInformation(
+         //   __FILE__,
+         //   __LINE__,
+         //   OPENMS_PRETTY_FUNCTION,
+         //   "Multiple Samples encountered for the same fraction group and the same label");
         }
       }
     }

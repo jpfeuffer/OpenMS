@@ -139,6 +139,8 @@ protected:
     setValidFormats_("out_fingerid", ListUtils::create<String>("mzTab"));
 
     registerOutputFile_("out_ms","<file>", "", "Internal SIRIUS .ms format after OpenMS preprocessing", false);
+    setValidFormats_("out_ms", ListUtils::create<String>("ms"));
+
     registerStringOption_("out_workspace_directory", "<directory>", "", "Output directory for SIRIUS workspace", false);
 
     registerFlag_("converter_mode", "Use this flag in combination with the out_ms file to only convert the input mzML and featureXML to an .ms file. Without further SIRIUS processing.", true);
@@ -222,7 +224,7 @@ protected:
     if (!out_ms.empty() && converter_mode)
     {
       QFile::copy(tmp_ms_file.toQString(), out_ms.toQString());
-      LOG_WARN << "SiriusAdapter was used in converter mode and is terminated after openms preprocessing. \n"
+      OPENMS_LOG_WARN << "SiriusAdapter was used in converter mode and is terminated after openms preprocessing. \n"
                   "If you would like to run SIRIUS internally please disable the converter mode." << std::endl; 
       return EXECUTION_OK;
     }
@@ -270,11 +272,11 @@ protected:
       bool copy_status = File::copyDirRecursively(tmp_dir.toQString(), sirius_workspace_directory.toQString());
       if (copy_status)
       { 
-        LOG_INFO << "Sirius Workspace was successfully copied to " << sirius_workspace_directory << std::endl;
+        OPENMS_LOG_INFO << "Sirius Workspace was successfully copied to " << sirius_workspace_directory << std::endl;
       }
       else
       {
-        LOG_INFO << "Sirius Workspace could not be copied to " << sirius_workspace_directory << ". Please run SiriusAdapter with debug >= 2." << std::endl;
+        OPENMS_LOG_INFO << "Sirius Workspace could not be copied to " << sirius_workspace_directory << ". Please run SiriusAdapter with debug >= 2." << std::endl;
       }
     }
    
@@ -282,7 +284,7 @@ protected:
     if (!out_ms.empty())
     {  
       QFile::copy(tmp_ms_file.toQString(), out_ms.toQString());
-      LOG_INFO << "Preprocessed .ms files was moved to " << out_ms << std::endl; 
+      OPENMS_LOG_INFO << "Preprocessed .ms files was moved to " << out_ms << std::endl; 
     }
 
     // clean tmp directory if debug level < 2 

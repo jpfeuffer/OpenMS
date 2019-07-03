@@ -139,7 +139,7 @@ namespace OpenMS
 
     if (!this->getIdentifier().empty() || !rhs.getIdentifier().empty())
     {
-      LOG_INFO << "DocumentIdentifiers are lost during merge of ConsensusMaps\n";
+      OPENMS_LOG_INFO << "DocumentIdentifiers are lost during merge of ConsensusMaps\n";
     }
 
     DocumentIdentifier::operator=(empty_map);
@@ -202,7 +202,7 @@ namespace OpenMS
     catch (Exception::Postcondition /*&e*/) // assign new UID's for conflicting entries
     {
       Size replaced_uids =  UniqueIdIndexer<ConsensusMap>::resolveUniqueIdConflicts();
-      LOG_INFO << "Replaced " << replaced_uids << " invalid uniqueID's\n";
+      OPENMS_LOG_INFO << "Replaced " << replaced_uids << " invalid uniqueID's\n";
     }
 
     return *this;
@@ -217,7 +217,7 @@ namespace OpenMS
 
     if (!this->getIdentifier().empty() || !rhs.getIdentifier().empty())
     {
-      LOG_INFO << "DocumentIdentifiers are lost during merge of ConsensusMaps\n";
+      OPENMS_LOG_INFO << "DocumentIdentifiers are lost during merge of ConsensusMaps\n";
     }
 
     DocumentIdentifier::operator=(empty_map);
@@ -311,7 +311,7 @@ namespace OpenMS
     catch (Exception::Postcondition ) // assign new UID's for conflicting entries
     {
       Size replaced_uids =  UniqueIdIndexer<ConsensusMap>::resolveUniqueIdConflicts();
-      LOG_INFO << "Replaced " << replaced_uids << " invalid uniqueID's\n";
+      OPENMS_LOG_INFO << "Replaced " << replaced_uids << " invalid uniqueID's\n";
     }
 
     return *this;
@@ -543,7 +543,7 @@ namespace OpenMS
   {
     if (s.empty())
     {
-      LOG_WARN << "Setting empty MS runs paths. Expected one for each map. Resulting ConsensusMap contains " + String(column_description_.size()) + " maps." << std::endl;
+      OPENMS_LOG_WARN << "Setting empty MS runs paths. Expected one for each map. Resulting ConsensusMap contains " + String(column_description_.size()) + " maps." << std::endl;
       for (auto & cd : column_description_)
       {
         cd.second.filename = "UNKNOWN";

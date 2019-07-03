@@ -38,6 +38,7 @@ MSstatsConverter
 MultiplexResolver
 MzMLSplitter
 NovorAdapter
+NucleicAcidSearchEngine
 OpenMSInfo
 OpenPepXL
 OpenPepXLLF
@@ -52,6 +53,7 @@ QCMerger
 QCShrinker
 ProteomicsLFQ
 RNADigestor
+RNAMassCalculator
 RNPxlXICFilter
 RNPxlSearch
 RTEvaluation

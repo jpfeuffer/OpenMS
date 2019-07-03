@@ -318,7 +318,7 @@ using namespace std;
 
     <B>Further considerations for parameter selection</B>
 
-    With @p best_charge_and_fractione and @p average, there is a trade-off between comparability of protein abundances within a sample and of abundances for the same protein across different samples.\n
+    With @p best_charge_and_fractions and @p average, there is a trade-off between comparability of protein abundances within a sample and of abundances for the same protein across different samples.\n
     Setting @p best_charge_and_fraction may increase reproducibility between samples, but will distort the proportions of protein abundances within a sample. The reason is that ionization properties vary between peptides, but should remain constant across samples. Filtering by charge state can help to reduce the impact of feature detection differences between samples.\n
     For @p average, there is a qualitative difference between @p (intensity weighted) mean/median and @p sum in the effect that missing peptide abundances have (only if @p include_all is set or @p top is 0): @p (intensity weighted) mean and @p median ignore missing cases, averaging only present values. If low-abundant peptides are not detected in some samples, the computed protein abundances for those samples may thus be too optimistic. @p sum implicitly treats missing values as zero, so this problem does not occur and comparability across samples is ensured. However, with @p sum the total number of peptides ("summands") available for a protein may affect the abundances computed for it (depending on @p top), so results within a sample may become unproportional.
 
@@ -457,7 +457,7 @@ protected:
           SampleAbundances::const_iterator pos = q.second.total_abundances.find(sample_id);
           out << (pos != q.second.total_abundances.end() ? pos->second : 0.0);
         }
-        
+
         out << "all" << endl;
       }
     }
@@ -480,7 +480,7 @@ protected:
       {
         out << "abundance_" + String(i);
       }
-     
+
       // TODO MULTIPLEXING: check if correct
       // if ratios-flag is set, print log2-ratios. ratio_1 <sep> ratio_x ....
       if (print_ratios)
@@ -637,16 +637,16 @@ protected:
   /// Write processing statistics.
   void writeStatistics_(const Statistics& stats)
   {
-    LOG_INFO << "\nProcessing summary - number of...";
+    OPENMS_LOG_INFO << "\nProcessing summary - number of...";
     if (spectral_counting_)
     {
-      LOG_INFO << "\n...spectra: " << stats.total_features << " identified"
+      OPENMS_LOG_INFO << "\n...spectra: " << stats.total_features << " identified"
                << "\n...peptides: " << stats.quant_peptides
                << " identified and quantified (considering best hits only)";
     }
     else
     {
-      LOG_INFO << "\n...features: " << stats.quant_features
+      OPENMS_LOG_INFO << "\n...features: " << stats.quant_features
                << " used for quantification, " << stats.total_features
                << " total (" << stats.blank_features << " no annotation, "
                << stats.ambig_features << " ambiguous annotation)"
@@ -658,19 +658,19 @@ protected:
     {
       bool include_all = algo_params_.getValue("include_all") == "true";
       Size top = algo_params_.getValue("top");
-      LOG_INFO << "\n...proteins/protein groups: " << stats.quant_proteins
+      OPENMS_LOG_INFO << "\n...proteins/protein groups: " << stats.quant_proteins
                << " quantified";
       if (top > 1)
       {
-        if (include_all) LOG_INFO << " (incl. ";
-        else LOG_INFO << ", ";
-        LOG_INFO << stats.too_few_peptides << " with fewer than " << top
+        if (include_all) OPENMS_LOG_INFO << " (incl. ";
+        else OPENMS_LOG_INFO << ", ";
+        OPENMS_LOG_INFO << stats.too_few_peptides << " with fewer than " << top
                  << " peptides";
-        if (stats.n_samples > 1) LOG_INFO << " in every sample";
-        if (include_all) LOG_INFO << ")";
+        if (stats.n_samples > 1) OPENMS_LOG_INFO << " in every sample";
+        if (include_all) OPENMS_LOG_INFO << ")";
       }
     }
-    LOG_INFO << endl;
+    OPENMS_LOG_INFO << endl;
   }
 
   ExperimentalDesign getExperimentalDesignIds_(const String & design_file, const vector<ProteinIdentification> & proteins)
@@ -737,9 +737,9 @@ protected:
           proteins[0].getIndistinguishableProteins().empty())
       {
         throw Exception::MissingInformation(
-         __FILE__, 
-         __LINE__, 
-         OPENMS_PRETTY_FUNCTION, 
+         __FILE__,
+         __LINE__,
+         OPENMS_PRETTY_FUNCTION,
          "No information on indistinguishable protein groups found in file '" + protein_groups + "'");
       }
       proteins_ = proteins[0]; // inference data is attached to first ID run
@@ -789,7 +789,7 @@ protected:
       IdXMLFile().load(in, proteins, peptides);
       for (Size i = 0; i < proteins.size(); ++i)
       {
-        columns_headers_[i].filename = proteins[i].getIdentifier();
+        columns_headers_[i].filename = proteins[i].getSearchEngine() + "_" + proteins[i].getDateTime().toString(Qt::ISODate);
       }
 
       ed = getExperimentalDesignIds_(design_file, proteins);
@@ -839,11 +839,11 @@ protected:
         cout << "MzTab Export: " << n_ind_prot << endl;
 */
         // fill MzTab with meta data and quants annotated in identification data structure
-        
+
         const bool report_unmapped(true);
         const bool report_unidentified_features(false);
         MzTab m = MzTab::exportConsensusMapToMzTab(consensus, in, report_unidentified_features, report_unmapped);
-        MzTabFile().store(mztab, m);    
+        MzTabFile().store(mztab, m);
       }
     }
 

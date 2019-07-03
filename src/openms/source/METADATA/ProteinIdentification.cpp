@@ -495,7 +495,7 @@ namespace OpenMS
     {
       // peptide hits
       const PeptideIdentification & peptide_id = pep_ids[pep_i];
-      const vector<PeptideHit> peptide_hits = peptide_id.getHits();
+      const vector<PeptideHit>& peptide_hits = peptide_id.getHits();
       for (Size ph_i = 0; ph_i != peptide_hits.size(); ++ph_i)
       {
         const PeptideHit & peptide_hit = peptide_hits[ph_i];
@@ -553,7 +553,7 @@ namespace OpenMS
   }
 
   void ProteinIdentification::computeModifications(
-    const std::vector<PeptideIdentification>& pep_ids, 
+    const std::vector<PeptideIdentification>& pep_ids,
     const StringList & skip_modifications)
   {
     // map protein accession to observed position,modifications pairs
@@ -603,7 +603,7 @@ namespace OpenMS
                 for (Size phe_i = 0; phe_i != ph_evidences.size(); ++phe_i)
                 {
                   const String & acc = ph_evidences[phe_i].getProteinAccession();
-                  const Size mod_pos = ph_evidences[phe_i].getStart() + ai; // start + ai 
+                  const Size mod_pos = ph_evidences[phe_i].getStart() + ai; // start + ai
                   prot2mod[acc].insert(make_pair(mod_pos, *res_mod));
                 }
               }
@@ -682,6 +682,11 @@ namespace OpenMS
   void ProteinIdentification::setSearchParameters(const SearchParameters& search_parameters)
   {
     search_parameters_ = search_parameters;
+  }
+
+  void ProteinIdentification::setSearchParameters(SearchParameters&& search_parameters)
+  {
+    search_parameters_ = std::move(search_parameters);
   }
 
   const ProteinIdentification::SearchParameters& ProteinIdentification::getSearchParameters() const

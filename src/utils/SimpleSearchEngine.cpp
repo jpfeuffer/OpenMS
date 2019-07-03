@@ -82,6 +82,44 @@
 using namespace OpenMS;
 using namespace std;
 
+//-------------------------------------------------------------
+//Doxygen docu
+//-------------------------------------------------------------
+
+/**
+    @page TOPP_SimpleSearchEngine SimpleSearchEngine
+
+    @brief Identifies peptides in MS/MS spectra.
+
+<CENTER>
+    <table>
+        <tr>
+            <td ALIGN = "center" BGCOLOR="#EBEBEB"> pot. predecessor tools </td>
+            <td VALIGN="middle" ROWSPAN=2> \f$ \longrightarrow \f$ SimpleSearchEngine \f$ \longrightarrow \f$</td>
+            <td ALIGN = "center" BGCOLOR="#EBEBEB"> pot. successor tools </td>
+        </tr>
+        <tr>
+            <td VALIGN="middle" ALIGN = "center" ROWSPAN=1> any signal-/preprocessing tool @n (in mzML format)</td>
+            <td VALIGN="middle" ALIGN = "center" ROWSPAN=1> @ref TOPP_IDFilter or @n any protein/peptide processing tool</td>
+        </tr>
+    </table>
+</CENTER>
+
+    @em This search engine is mainly for educational/benchmarking/prototyping use cases.
+    It lacks behind in speed and/or quality of results when compared to state-of-the-art search engines.
+
+    @note Currently mzIdentML (mzid) is not directly supported as an input/output format of this tool. Convert mzid files to/from idXML using @ref TOPP_IDFileConverter if necessary.
+
+    <B>The command line parameters of this tool are:</B>
+    @verbinclude TOPP_SimpleSearchEngine.cli
+    <B>INI file documentation of this tool:</B>
+    @htmlinclude TOPP_SimpleSearchEngine.html
+*/
+
+// We do not want this class to show up in the docu:
+/// @cond TOPPCLASSES
+
+
 class SimpleSearchEngine :
     public TOPPBase
 {

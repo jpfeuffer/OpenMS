@@ -76,7 +76,7 @@ using namespace std;
 
     @note FalseDiscoveryRate only annotates peptides and proteins with their FDR. By setting FDR:PSM or FDR:protein the maximum q-value (e.g., 0.05 corresponds to an FDR of 5%) can be controlled on the PSM and protein level.
     Alternatively, FDR filtering can be performed in the @ref IDFilter tool by setting score:pep and score:prot to the maximum q-value. After potential filtering, associations are
-    automatically updated and unreferenced proteins/peptides removed.
+    automatically updated and unreferenced proteins/peptides removed based on the advanced cleanup parameters.
 
     @note Currently mzIdentML (mzid) is not directly supported as an input/output format of this tool. Convert mzid files to/from idXML using @ref TOPP_IDFileConverter if necessary.
 
@@ -197,7 +197,7 @@ protected:
             fdr.applyBasic(run, true);
             if (protein_fdr < 1)
             {
-              LOG_INFO << "FDR control: Filtering proteins..." << endl;
+              OPENMS_LOG_INFO << "FDR control: Filtering proteins..." << endl;
               IDFilter::filterHitsByScore(prot_ids, protein_fdr);
               filter_applied = true;
             }
@@ -211,16 +211,15 @@ protected:
         filter_applied = true;
 
         if (psm_fdr < 1)
-        {      
-          LOG_INFO << "FDR control: Filtering PSMs..." << endl;
-          LOG_INFO << "FDR control: Filtering PSMs..." << endl;
+        {
+          OPENMS_LOG_INFO << "FDR control: Filtering PSMs..." << endl;
           IDFilter::filterHitsByScore(pep_ids, psm_fdr);
         }
       }
     }
     catch (Exception::MissingInformation& e)
     {
-      LOG_FATAL_ERROR << "FalseDiscoveryRate failed due to missing information:\n"
+      OPENMS_LOG_FATAL_ERROR << "FalseDiscoveryRate failed due to missing information:\n"
       << e.getMessage();
       return INCOMPATIBLE_INPUT_DATA;
     }
@@ -255,7 +254,7 @@ protected:
                                                  prot_it->getHits());
       if (!valid)
       {
-        LOG_WARN << "Warning: While updating protein groups, some prot_ids were removed from groups that are still present. "
+        OPENMS_LOG_WARN << "Warning: While updating protein groups, some prot_ids were removed from groups that are still present. "
                  << "The new grouping (especially the group probabilities) may not be completely valid any more." 
                  << endl;
       }
@@ -265,14 +264,14 @@ protected:
 
       if (!valid)
       {
-        LOG_WARN << "Warning: While updating indistinguishable prot_ids, some prot_ids were removed from groups that are still present. "
+        OPENMS_LOG_WARN << "Warning: While updating indistinguishable prot_ids, some prot_ids were removed from groups that are still present. "
                  << "The new grouping (especially the group probabilities) may not be completely valid any more." 
                  << endl;
       }
     }
 
     // some stats
-    LOG_INFO << "Before filtering:\n"
+    OPENMS_LOG_INFO << "Before filtering:\n"
              << n_prot_ids << " protein identification(s) with "
              << n_prot_hits << " protein hit(s),\n"
              << n_pep_ids << " peptide identification(s) with "
@@ -283,7 +282,7 @@ protected:
              << pep_ids.size() << " peptide identification(s) with "
              << IDFilter::countHits(pep_ids) << " pep_ids hit(s)." << endl;
 
-    LOG_INFO << "Writing filtered output..." << endl;
+    OPENMS_LOG_INFO << "Writing filtered output..." << endl;
     IdXMLFile().store(out, prot_ids, pep_ids);
     return EXECUTION_OK;
   }

@@ -42,6 +42,7 @@ using namespace std;
 namespace OpenMS
 {
   const std::string EnzymaticDigestion::NamesOfSpecificity[] = {"full", "semi", "none"};
+  const std::string EnzymaticDigestion::NoCleavage = "no cleavage";
   const std::string EnzymaticDigestion::UnspecificCleavage = "unspecific cleavage";
 
   EnzymaticDigestion::EnzymaticDigestion() :
@@ -152,17 +153,17 @@ namespace OpenMS
 
     if (pos >= (int)sequence.size())
     {
-      LOG_WARN << "Error: start of fragment (" << pos << ") is beyond end of sequence '" << sequence << "'!" << endl;
+      OPENMS_LOG_WARN << "Error: start of fragment (" << pos << ") is beyond end of sequence '" << sequence << "'!" << endl;
       return false;
     }
     if (pos + length > (int)sequence.size())
     {
-      LOG_WARN << "Error: end of fragment (" << (pos + length) << ") is beyond end of sequence '" << sequence << "'!" << endl;
+      OPENMS_LOG_WARN << "Error: end of fragment (" << (pos + length) << ") is beyond end of sequence '" << sequence << "'!" << endl;
       return false;
     }
     if (length == 0 || sequence.empty())
     {
-      LOG_WARN << "Error: fragment and sequence must not be empty!" << endl;
+      OPENMS_LOG_WARN << "Error: fragment and sequence must not be empty!" << endl;
       return false;
     }
 
@@ -295,7 +296,6 @@ namespace OpenMS
   {
     Size count = fragment_positions.size();
     Size wrong_size(0);
-    Size l(0); //length
 
     // no cleavage sites? return full string
     if (count == 0)
@@ -310,7 +310,7 @@ namespace OpenMS
     for (Size i = 1; i != count; ++i)
     {
       // add if cleavage product larger than min length
-      l = fragment_positions[i] - fragment_positions[i - 1];
+      Size l = fragment_positions[i] - fragment_positions[i - 1];
       if (l >= min_length && l <= max_length)
       {
         output.push_back(sequence.substr(fragment_positions[i - 1], l));
@@ -319,7 +319,7 @@ namespace OpenMS
     }
 
     // add last cleavage product (need to add because end is not a cleavage site) if larger than min length
-    l = sequence.size() - fragment_positions[count - 1];
+    Size l = sequence.size() - fragment_positions[count - 1];
     if (l >= min_length && l <= max_length)
     {
       output.push_back(sequence.substr(fragment_positions[count - 1], l));
@@ -331,19 +331,19 @@ namespace OpenMS
     {
       for (Size j = 1; j < count - i; ++j)
       {
-        l = fragment_positions[j + i] - fragment_positions[j - 1];
-        if (l >= min_length && l <= max_length)
+        Size m = fragment_positions[j + i] - fragment_positions[j - 1];
+        if (m >= min_length && m <= max_length)
         {
-          output.push_back(sequence.substr(fragment_positions[j - 1], l));
+          output.push_back(sequence.substr(fragment_positions[j - 1], m));
         }
         else ++wrong_size;
       }
 
       // add last cleavage product (need to add because end is not a cleavage site)
-      l = sequence.size() - fragment_positions[count - i - 1];
-      if (l >= min_length && l <= max_length)
+      Size n = sequence.size() - fragment_positions[count - i - 1];
+      if (n >= min_length && n <= max_length)
       {
-        output.push_back(sequence.substr(fragment_positions[count - i - 1], l));
+        output.push_back(sequence.substr(fragment_positions[count - i - 1], n));
       }
       else ++wrong_size;
     }
@@ -415,4 +415,5 @@ namespace OpenMS
     std::vector<int> fragment_positions = tokenize_(sequence.getString());
     return digestAfterTokenize_(fragment_positions, sequence, output, min_length, max_length);
   }
+
 } //namespace

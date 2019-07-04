@@ -140,7 +140,7 @@ public:
         {
           if (experiment_type != "label-free")
           {
-            LOG_WARN << "No channel id annotated in consensusXML. Assuming one channel." << std::endl;
+            OPENMS_LOG_WARN << "No channel id annotated in consensusXML. Assuming one channel." << std::endl;
           }
           return 1;
         }

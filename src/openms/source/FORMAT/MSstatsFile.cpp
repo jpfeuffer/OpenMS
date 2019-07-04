@@ -72,13 +72,13 @@ void OpenMS::MSstatsFile::checkConditionISO_(const ExperimentalDesign::SampleSec
   }
 }
 
-void OpenMS::MSstatsFile::storeLFQ(const OpenMS::String &filename, const ConsensusMap &consensus_map,
+void OpenMS::MSstatsFile::storeLFQ(const OpenMS::String &filename, ConsensusMap &consensus_map,
                                 const OpenMS::ExperimentalDesign& design, const StringList& reannotate_filenames,
                                 const bool is_isotope_label_type, const String& bioreplicate, const String& condition,
                                 const String& retention_time_summarization_method)
 {
   // Experimental Design file
-  ExperimentalDesign::SampleSection sampleSection = design.getSampleSection();
+  const ExperimentalDesign::SampleSection& sampleSection = design.getSampleSection();
 
   if (design.getNumberOfLabels() != 1)
   {
@@ -235,7 +235,7 @@ void OpenMS::MSstatsFile::storeLFQ(const OpenMS::String &filename, const Consens
 
   // We quantify indistinguishable groups with one (corner case) or multiple proteins.
   // If indistinguishable groups are not annotated (no inference or only trivial inference has been performed) we assume
-  // that all proteins can be indipendently quantified (each forming an indistinguishable group).
+  // that all proteins can be independently quantified (each forming an indistinguishable group).
   using IndProtGrp = ProteinIdentification::ProteinGroup;
   using IndProtGrps = std::vector<IndProtGrp>;
   IndProtGrps& ind_prots = consensus_map.getProteinIdentifications()[0].getIndistinguishableProteins();

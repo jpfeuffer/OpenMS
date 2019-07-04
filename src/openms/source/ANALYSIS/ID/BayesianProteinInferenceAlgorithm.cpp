@@ -301,7 +301,7 @@ namespace OpenMS
                 , std::ofstream::out | std::ofstream::app);
             IDBoostGraph::printGraph(ofs, fg);
           }
-          LOG_WARN << "Warning: Loopy belief propagation encountered a problem in a connected component. Skipping"
+         OPENMS_LOG_WARN << "Warning: Loopy belief propagation encountered a problem in a connected component. Skipping"
                       " inference there." << std::endl;
           return 0;
         }
@@ -448,7 +448,7 @@ namespace OpenMS
 
           // Graph builder needs to build otherwise it leaks memory.
           bigb.to_graph();
-          LOG_WARN << "Warning: Loopy belief propagation encountered a problem in a connected component. Skipping"
+         OPENMS_LOG_WARN << "Warning: Loopy belief propagation encountered a problem in a connected component. Skipping"
                       "inference there." << std::endl;
           return 0;
         }
@@ -476,7 +476,7 @@ namespace OpenMS
 
     double operator() (double alpha, double beta, double gamma)
     {
-      LOG_INFO << "Evaluating: " << alpha << " " << beta << " " << gamma << std::endl;
+     OPENMS_LOG_INFO << "Evaluating: " << alpha << " " << beta << " " << gamma << std::endl;
       param_.setValue("model_parameters:prot_prior", gamma);
       param_.setValue("model_parameters:pep_emission", alpha);
       param_.setValue("model_parameters:pep_spurious_emission", beta);
@@ -767,13 +767,13 @@ namespace OpenMS
       }
 
       // TODO try to calc AUC partial only (e.g. up to 5% FDR)
-      LOG_INFO << "Peptide FDR AUC before protein inference: " << pepFDR.rocN(cmap, 0) << std::endl;
+     OPENMS_LOG_INFO << "Peptide FDR AUC before protein inference: " << pepFDR.rocN(cmap, 0) << std::endl;
 
       IDBoostGraph ibg(proteinIDs[0], cmap, nr_top_psms, use_run_info, use_unannotated_ids, exp_des);
       inferPosteriorProbabilities_(ibg);
       setScoreTypeAndSettings_(proteinIDs[0]);
 
-      LOG_INFO << "Peptide FDR AUC after protein inference: " << pepFDR.rocN(cmap, 0) << std::endl;
+     OPENMS_LOG_INFO << "Peptide FDR AUC after protein inference: " << pepFDR.rocN(cmap, 0) << std::endl;
     }
     else if (cmap.getProteinIdentifications().size() > 1)
     {
@@ -790,13 +790,13 @@ namespace OpenMS
         }
 
         //TODO try to calc AUC partial only (e.g. up to 5% FDR)
-        LOG_INFO << "Peptide FDR AUC before protein inference: " << pepFDR.rocN(cmap, 0, proteinID.getIdentifier()) << std::endl;
+       OPENMS_LOG_INFO << "Peptide FDR AUC before protein inference: " << pepFDR.rocN(cmap, 0, proteinID.getIdentifier()) << std::endl;
 
         setScoreTypeAndSettings_(proteinID);
         IDBoostGraph ibg(proteinID, cmap, nr_top_psms, use_run_info, use_unannotated_ids);
         inferPosteriorProbabilities_(ibg);
 
-        LOG_INFO << "Peptide FDR AUC after protein inference: " << pepFDR.rocN(cmap, 0, proteinID.getIdentifier()) << std::endl;
+       OPENMS_LOG_INFO << "Peptide FDR AUC after protein inference: " << pepFDR.rocN(cmap, 0, proteinID.getIdentifier()) << std::endl;
       }
     }
   }
@@ -830,12 +830,12 @@ namespace OpenMS
     //TODO think about running grid search on the small CCs only (maybe it's enough)
     if (gs.getNrCombos() > 1)
     {
-      LOG_INFO << "Testing " << gs.getNrCombos() << " param combinations." << std::endl;
+     OPENMS_LOG_INFO << "Testing " << gs.getNrCombos() << " param combinations." << std::endl;
       /*double res =*/ gs.evaluate(GridSearchEvaluator(param_, ibg, debug_lvl_), -1.0, bestParams);
     }
     else
     {
-      LOG_INFO << "Only one combination specified: Skipping grid search." << std::endl;
+     OPENMS_LOG_INFO << "Only one combination specified: Skipping grid search." << std::endl;
     }
 
     double bestGamma = gamma_search[bestParams[2]];
@@ -977,13 +977,13 @@ namespace OpenMS
       }
     }
 
-    LOG_INFO << "Peptide FDR AUC before protein inference: " << pepFDR.rocN(peptideIDs, 0, proteinIDs[0].getIdentifier()) << std::endl;
+   OPENMS_LOG_INFO << "Peptide FDR AUC before protein inference: " << pepFDR.rocN(peptideIDs, 0, proteinIDs[0].getIdentifier()) << std::endl;
 
     setScoreTypeAndSettings_(proteinIDs[0]);
     IDBoostGraph ibg(proteinIDs[0], peptideIDs, nr_top_psms, use_run_info, exp_des);
     inferPosteriorProbabilities_(ibg);
 
-    LOG_INFO << "Peptide FDR AUC after protein inference: " << pepFDR.rocN(peptideIDs, 0, proteinIDs[0].getIdentifier()) << std::endl;
+   OPENMS_LOG_INFO << "Peptide FDR AUC after protein inference: " << pepFDR.rocN(peptideIDs, 0, proteinIDs[0].getIdentifier()) << std::endl;
   }
 
 }

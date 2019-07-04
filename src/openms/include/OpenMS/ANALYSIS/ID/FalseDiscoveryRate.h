@@ -136,11 +136,6 @@ public:
     /// if fp_cutoff = 0, it will calculate the full AUC. Restricted to IDs from a specific ID run.
     double rocN(const ConsensusMap& ids, Size fp_cutoff, const String& identifier) const;
 
-
-private:
-
-    ///Not implemented
-    FalseDiscoveryRate(const FalseDiscoveryRate &);
     /**
        @brief Calculate FDR on the level of molecule-query matches (e.g. peptide-spectrum matches) for "general" identification data
 
@@ -151,7 +146,9 @@ private:
     */
     IdentificationData::ScoreTypeRef applyToQueryMatches(IdentificationData& id_data, IdentificationData::ScoreTypeRef score_ref) const;
 
-  private:
+
+private:
+
     /// Not implemented
     FalseDiscoveryRate(const FalseDiscoveryRate&);
 
@@ -633,7 +630,6 @@ private:
         return false;
       }
     };
-
 
     template <typename HitType>
     std::pair<double,bool> getScoreLabel_(const HitType& hit, std::function<bool(const HitType&)> fun) const

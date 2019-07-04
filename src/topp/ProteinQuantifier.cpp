@@ -842,7 +842,8 @@ protected:
 
         const bool report_unmapped(true);
         const bool report_unidentified_features(false);
-        MzTab m = MzTab::exportConsensusMapToMzTab(consensus, in, report_unidentified_features, report_unmapped);
+        const bool report_subfeatures(false);
+        MzTab m = MzTab::exportConsensusMapToMzTab(consensus, in, report_unidentified_features, report_unmapped, report_subfeatures);
         MzTabFile().store(mztab, m);
       }
     }
@@ -851,7 +852,7 @@ protected:
     String separator = getStringOption_("format:separator");
     String replacement = getStringOption_("format:replacement");
     String quoting = getStringOption_("format:quoting");
-    if (separator == "") separator = "\t";
+    if (separator.empty()) separator = "\t";
     String::QuotingMethod quoting_method;
     if (quoting == "none") quoting_method = String::NONE;
     else if (quoting == "double") quoting_method = String::DOUBLE;

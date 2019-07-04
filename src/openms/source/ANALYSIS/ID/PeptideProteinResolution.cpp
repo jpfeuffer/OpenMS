@@ -97,7 +97,7 @@ namespace OpenMS
           "No indistinguishable Groups annotated. Currently this class only resolves across groups.");
     }
 
-    LOG_INFO << "Resolving peptides between " << protein.getHits().size() << " proteins in " << groups.size() << " indistinguishable groups." << std::endl;
+   OPENMS_LOG_INFO << "Resolving peptides between " << protein.getHits().size() << " proteins in " << groups.size() << " indistinguishable groups." << std::endl;
 
     // I dont think we need to assume sortedness here
     //if (!skip_sort) sort(groups.begin(), groups.end());
@@ -238,15 +238,15 @@ namespace OpenMS
           evToKeep = grpIdxToEvIdx[*toResolve->begin()];
           if (toResolve->size() > 1)
           {
-            LOG_INFO << "Resolution: Peptide " << pep_it->getHits()[0].getSequence().toString() << " had groups:" << std::endl;
+           OPENMS_LOG_INFO << "Resolution: Peptide " << pep_it->getHits()[0].getSequence().toString() << " had groups:" << std::endl;
 
-            LOG_INFO << "tgt: ";
-            for (const auto& g : bestNonDecoyGrpTie) LOG_INFO << g << "=" << groups[g].probability << ", ";
-            LOG_INFO << std::endl;
-            LOG_INFO << "dec: ";
-            for (const auto& g : bestDecoyGrpTie) LOG_INFO << g << "=" << groups[g].probability << ", ";
-            LOG_INFO << std::endl;
-            LOG_INFO << "Kept: " << *toResolve->begin() << std::endl;
+           OPENMS_LOG_INFO << "tgt: ";
+            for (const auto& g : bestNonDecoyGrpTie)OPENMS_LOG_INFO << g << "=" << groups[g].probability << ", ";
+           OPENMS_LOG_INFO << std::endl;
+           OPENMS_LOG_INFO << "dec: ";
+            for (const auto& g : bestDecoyGrpTie)OPENMS_LOG_INFO << g << "=" << groups[g].probability << ", ";
+           OPENMS_LOG_INFO << std::endl;
+           OPENMS_LOG_INFO << "Kept: " << *toResolve->begin() << std::endl;
           }
         }
         else
@@ -266,7 +266,7 @@ namespace OpenMS
       }
       else
       {
-        LOG_WARN << "Warning PeptideProteinResolution: Skipping spectrum without hits." << std::endl;
+       OPENMS_LOG_WARN << "Warning PeptideProteinResolution: Skipping spectrum without hits." << std::endl;
       }
     }
   }
@@ -287,7 +287,7 @@ namespace OpenMS
           "No indistinguishable Groups annotated. Currently this class only resolves across groups.");
     }
 
-    LOG_INFO << "Resolving peptides between " << protein.getHits().size() << " proteins in " << groups.size() << " indistinguishable groups." << std::endl;
+   OPENMS_LOG_INFO << "Resolving peptides between " << protein.getHits().size() << " proteins in " << groups.size() << " indistinguishable groups." << std::endl;
 
 
     if (!skip_sort) sort(groups.begin(), groups.end());
@@ -353,7 +353,7 @@ namespace OpenMS
       }
       else
       {
-        LOG_WARN << "Warning PeptideProteinResolution: Skipping spectrum without hits." << std::endl;
+       OPENMS_LOG_WARN << "Warning PeptideProteinResolution: Skipping spectrum without hits." << std::endl;
       }
     }
   }
@@ -559,7 +559,7 @@ namespace OpenMS
     {
       if (*grp_it >= origin_groups.size())
       {
-        LOG_FATAL_ERROR << "Something went terribly wrong. "
+       OPENMS_LOG_FATAL_ERROR << "Something went terribly wrong. "
                            "Group with index " << *grp_it << "doesnt exist. "
                                                              " ProteinPeptideResolution: Groups changed"
                                                              " after building data structures." << std::endl;
@@ -577,12 +577,12 @@ namespace OpenMS
       {
         if (statistics_)
         {
-          LOG_DEBUG << "Group: ";
+         OPENMS_LOG_DEBUG << "Group: ";
           for (const String& s : origin_groups[*grp_it].accessions)
           {
-            LOG_DEBUG << s << ", ";
+           OPENMS_LOG_DEBUG << s << ", ";
           }
-          LOG_DEBUG << " steals " << indist_prot_grp_to_pep_[*grp_it].size() << " peptides for itself." << std::endl;
+         OPENMS_LOG_DEBUG << " steals " << indist_prot_grp_to_pep_[*grp_it].size() << " peptides for itself." << std::endl;
         }
         // Update all the peptides the current best point to
         for (set<Size>::iterator pepid_it =
@@ -629,7 +629,7 @@ namespace OpenMS
         {
           if (*grp_it >= origin_groups.size())
           {
-            LOG_FATAL_ERROR << "Something went terribly wrong. "
+           OPENMS_LOG_FATAL_ERROR << "Something went terribly wrong. "
                                "Group with index " << *grp_it << "doesnt exist. "
                                                                  " ProteinPeptideResolution: Groups changed"
                                                                  " after building data structures." << std::endl;
@@ -647,12 +647,12 @@ namespace OpenMS
           {
             if (statistics_)
             {
-              LOG_DEBUG << "Group: ";
+             OPENMS_LOG_DEBUG << "Group: ";
               for (const String& s : origin_groups[*grp_it].accessions)
               {
-                LOG_DEBUG << s << ", ";
+               OPENMS_LOG_DEBUG << s << ", ";
               }
-              LOG_DEBUG << " steals " << indist_prot_grp_to_pep_[*grp_it].size() << " peptides for itself." << std::endl;
+             OPENMS_LOG_DEBUG << " steals " << indist_prot_grp_to_pep_[*grp_it].size() << " peptides for itself." << std::endl;
             }
 
             // Update all the peptides the current best point to
@@ -731,7 +731,7 @@ namespace OpenMS
     {
       if (*grp_it >= origin_groups.size())
       {
-        LOG_FATAL_ERROR << "Something went terribly wrong. "
+       OPENMS_LOG_FATAL_ERROR << "Something went terribly wrong. "
                            "Group with index " << *grp_it << "doesnt exist. "
                                                              " ProteinPeptideResolution: Groups changed"
                                                              " after building data structures." << std::endl;
@@ -747,12 +747,12 @@ namespace OpenMS
 
       if (statistics_)
       {
-        LOG_DEBUG << "Group: ";
+       OPENMS_LOG_DEBUG << "Group: ";
         for (const String& s : origin_groups[*grp_it].accessions)
         {
-          LOG_DEBUG << s << ", ";
+         OPENMS_LOG_DEBUG << s << ", ";
         }
-        LOG_DEBUG << " steals " << indist_prot_grp_to_pep_[*grp_it].size() << " peptides for itself." << std::endl;
+       OPENMS_LOG_DEBUG << " steals " << indist_prot_grp_to_pep_[*grp_it].size() << " peptides for itself." << std::endl;
       }
 
       // Update all the peptides the current best point to

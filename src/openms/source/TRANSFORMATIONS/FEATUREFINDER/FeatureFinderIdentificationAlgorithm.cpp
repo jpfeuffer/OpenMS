@@ -335,7 +335,7 @@ namespace OpenMS
         ++seeds_added;
       }
     }
-    LOG_INFO << "Seeds added: " << seeds_added << endl;
+   OPENMS_LOG_INFO << "Seeds added: " << seeds_added << endl;
 
 
     n_internal_peps_ = peptide_map_.size();
@@ -590,7 +590,7 @@ namespace OpenMS
 
   }
 
-  void FeatureFinderIdentificationAlgorithm::createAssayLibrary_(PeptideMap& peptide_map, PeptideRefRTMap& ref_rt_map) 
+  void FeatureFinderIdentificationAlgorithm::createAssayLibrary_(PeptideMap& peptide_map, PeptideRefRTMap& ref_rt_map)
   {
     std::set<String> protein_accessions;
 
@@ -599,7 +599,7 @@ namespace OpenMS
     {
       TargetedExperiment::Peptide peptide;
 
-      const AASequence& seq = pm_it->first;
+      const AASequence &seq = pm_it->first;
       OPENMS_LOG_DEBUG << "\nPeptide: " << seq.toString() << std::endl;
       peptide.sequence = seq.toString();
       // @NOTE: Technically, "TargetedExperiment::Peptide" stores the unmodified
@@ -615,8 +615,8 @@ namespace OpenMS
       // keep track of protein accessions:
       set<String> current_accessions;
       // internal/external pait
-      const pair<RTMap, RTMap>& pair = pm_it->second.begin()->second;
-      const PeptideHit& hit = (pair.first.empty() ?
+      const pair<RTMap, RTMap> &pair = pm_it->second.begin()->second;
+      const PeptideHit &hit = (pair.first.empty() ?
                                pair.second.begin()->second->getHits()[0] :
                                pair.first.begin()->second->getHits()[0]);
       current_accessions = hit.extractProteinAccessionsSet();
@@ -633,7 +633,7 @@ namespace OpenMS
       // get regions in which peptide elutes (ideally only one):
       std::vector<RTRegion> rt_regions;
       getRTRegions_(pm_it->second, rt_regions);
-      LOG_DEBUG << "Found " << rt_regions.size() << " RT region(s)." << std::endl;
+      OPENMS_LOG_DEBUG << "Found " << rt_regions.size() << " RT region(s)." << std::endl;
 
       // go through different charge states:
       for (ChargeMap::const_iterator cm_it = pm_it->second.begin();
@@ -653,28 +653,30 @@ namespace OpenMS
 
           Size counter = 0;
           // accumulate IDs over multiple regions: potentially not needed for seeds
-          RTMap& internal_ids = ref_rt_map[peptide_id].first;
-          RTMap& external_ids = ref_rt_map[peptide_id].second;
+          RTMap &internal_ids = ref_rt_map[peptide_id].first;
+          RTMap &external_ids = ref_rt_map[peptide_id].second;
           for (vector<RTRegion>::iterator reg_it = rt_regions.begin();
                reg_it != rt_regions.end(); ++reg_it)
           {
             if (reg_it->ids.count(charge))
             {
-              LOG_DEBUG << "Region " << counter + 1 << " (RT: "
-                        << float(reg_it->start) << "-" << float(reg_it->end)
-                        << ", size " << float(reg_it->end - reg_it->start) << ")"
-                        << std::endl;
+              OPENMS_LOG_DEBUG << "Region " << counter + 1 << " (RT: "
+                               << float(reg_it->start) << "-" << float(reg_it->end)
+                               << ", size " << float(reg_it->end - reg_it->start) << ")"
+                               << std::endl;
 
               peptide.id = peptide_id;
-              if (rt_regions.size() > 1) peptide.id += ":" + String(++counter);
+              if (rt_regions.size() > 1)
+                peptide.id += ":" + String(++counter);
 
-              auto& a = reg_it->ids[charge].first;
+              auto &a = reg_it->ids[charge].first;
               double mz = a.begin()->second->getMZ();
               // get isotope distribution for peptide:
               Size n_isotopes = (isotope_pmin_ > 0.0) ? 10 : n_isotopes_;
               CoarseIsotopePatternGenerator generator(n_isotopes);
 
-              IsotopeDistribution iso_dist = generator.estimateFromPeptideWeight(mz * charge - charge * Constants::PROTON_MASS_U);
+              IsotopeDistribution iso_dist = generator
+                  .estimateFromPeptideWeight(mz * charge - charge * Constants::PROTON_MASS_U);
               if (isotope_pmin_ > 0.0)
               {
                 iso_dist.trimLeft(isotope_pmin_);
@@ -682,69 +684,7 @@ namespace OpenMS
                 iso_dist.renormalize();
               }
 
-              LOG_DEBUG << "Seed Charge: " << charge << " (m/z: " << mz << ")" << std::endl;
-
-              // store beginning and end of RT region:
-              peptide.rts.clear();
-              addPeptideRT_(peptide, reg_it->start);
-              addPeptideRT_(peptide, reg_it->end);
-              library_.addPeptide(peptide);
-              generateTransitions_(peptide.id, mz, charge, iso_dist);
-            }
-            internal_ids.insert(reg_it->ids[charge].first.begin(),
-                      reg_it->ids[charge].first.end());
-            external_ids.insert(reg_it->ids[charge].second.begin(), // Note: empty
-                                reg_it->ids[charge].second.end());
-          }
-        }
-        else
-        {
-          // get isotope distribution for peptide:
-          Size n_isotopes = (isotope_pmin_ > 0.0) ? 10 : n_isotopes_;
-          IsotopeDistribution iso_dist =
-            seq.getFormula(Residue::Full, 0).getIsotopeDistribution(CoarseIsotopePatternGenerator(n_isotopes));
-          if (isotope_pmin_ > 0.0)
-          {
-            iso_dist.trimLeft(isotope_pmin_);
-            iso_dist.trimRight(isotope_pmin_);
-            iso_dist.renormalize();
-          }
-
-      // get regions in which peptide elutes (ideally only one):
-      std::vector<RTRegion> rt_regions;
-      getRTRegions_(pm_it->second, rt_regions);
-      OPENMS_LOG_DEBUG << "Found " << rt_regions.size() << " RT region(s)." << std::endl;
-
-      // go through different charge states:
-      for (ChargeMap::const_iterator cm_it = pm_it->second.begin();
-           cm_it != pm_it->second.end(); ++cm_it)
-      {
-        Int charge = cm_it->first;
-        double mz = seq.getMonoWeight(Residue::Full, charge) / charge;
-        OPENMS_LOG_DEBUG << "Charge: " << charge << " (m/z: " << mz << ")" << std::endl;
-        peptide.setChargeState(charge);
-        String peptide_id = peptide.sequence + "/" + String(charge);
-
-          // we want to detect one feature per peptide and charge state - if there
-          // are multiple RT regions, group them together:
-          peptide.setPeptideGroupLabel(peptide_id);
-          peptide.rts.clear();
-          Size counter = 0;
-          // accumulate IDs over multiple regions:
-          RTMap& internal_ids = ref_rt_map[peptide_id].first;
-          RTMap& external_ids = ref_rt_map[peptide_id].second;
-          for (vector<RTRegion>::iterator reg_it = rt_regions.begin();
-               reg_it != rt_regions.end(); ++reg_it)
-          {
-            if (reg_it->ids.count(charge))
-            {
-              OPENMS_LOG_DEBUG << "Region " << counter + 1 << " (RT: "
-                        << float(reg_it->start) << "-" << float(reg_it->end)
-                        << ", size " << float(reg_it->end - reg_it->start) << ")"
-                        << std::endl;
-
-              peptide.id = peptide_id;
-              if (rt_regions.size() > 1) peptide.id += ":" + String(++counter);
+              OPENMS_LOG_DEBUG << "Seed Charge: " << charge << " (m/z: " << mz << ")" << std::endl;
 
               // store beginning and end of RT region:
               peptide.rts.clear();
@@ -755,19 +695,83 @@ namespace OpenMS
             }
             internal_ids.insert(reg_it->ids[charge].first.begin(),
                                 reg_it->ids[charge].first.end());
-            external_ids.insert(reg_it->ids[charge].second.begin(),
+            external_ids.insert(reg_it->ids[charge].second.begin(), // Note: empty
                                 reg_it->ids[charge].second.end());
           }
         }
-      }
-    }
+        else
+        {
+          // get isotope distribution for peptide:
+          Size n_isotopes = (isotope_pmin_ > 0.0) ? 10 : n_isotopes_;
+          IsotopeDistribution iso_dist =
+              seq.getFormula(Residue::Full, 0).getIsotopeDistribution(CoarseIsotopePatternGenerator(n_isotopes));
+          if (isotope_pmin_ > 0.0)
+          {
+            iso_dist.trimLeft(isotope_pmin_);
+            iso_dist.trimRight(isotope_pmin_);
+            iso_dist.renormalize();
+          }
 
-    // add proteins to library:
-    for (String const & acc : protein_accessions)
-    {
-      TargetedExperiment::Protein protein;
-      protein.id = acc;
-      library_.addProtein(protein);
+          // get regions in which peptide elutes (ideally only one):
+          std::vector<RTRegion> rt_regions;
+          getRTRegions_(pm_it->second, rt_regions);
+          OPENMS_LOG_DEBUG << "Found " << rt_regions.size() << " RT region(s)." << std::endl;
+
+          // go through different charge states:
+          for (ChargeMap::const_iterator cm_it = pm_it->second.begin();
+               cm_it != pm_it->second.end(); ++cm_it)
+          {
+            Int charge = cm_it->first;
+            double mz = seq.getMonoWeight(Residue::Full, charge) / charge;
+            OPENMS_LOG_DEBUG << "Charge: " << charge << " (m/z: " << mz << ")" << std::endl;
+            peptide.setChargeState(charge);
+            String peptide_id = peptide.sequence + "/" + String(charge);
+
+            // we want to detect one feature per peptide and charge state - if there
+            // are multiple RT regions, group them together:
+            peptide.setPeptideGroupLabel(peptide_id);
+            peptide.rts.clear();
+            Size counter = 0;
+            // accumulate IDs over multiple regions:
+            RTMap &internal_ids = ref_rt_map[peptide_id].first;
+            RTMap &external_ids = ref_rt_map[peptide_id].second;
+            for (vector<RTRegion>::iterator reg_it = rt_regions.begin();
+                 reg_it != rt_regions.end(); ++reg_it)
+            {
+              if (reg_it->ids.count(charge))
+              {
+                OPENMS_LOG_DEBUG << "Region " << counter + 1 << " (RT: "
+                                 << float(reg_it->start) << "-" << float(reg_it->end)
+                                 << ", size " << float(reg_it->end - reg_it->start) << ")"
+                                 << std::endl;
+
+                peptide.id = peptide_id;
+                if (rt_regions.size() > 1)
+                  peptide.id += ":" + String(++counter);
+
+                // store beginning and end of RT region:
+                peptide.rts.clear();
+                addPeptideRT_(peptide, reg_it->start);
+                addPeptideRT_(peptide, reg_it->end);
+                library_.addPeptide(peptide);
+                generateTransitions_(peptide.id, mz, charge, iso_dist);
+              }
+              internal_ids.insert(reg_it->ids[charge].first.begin(),
+                                  reg_it->ids[charge].first.end());
+              external_ids.insert(reg_it->ids[charge].second.begin(),
+                                  reg_it->ids[charge].second.end());
+            }
+          }
+        }
+      }
+
+      // add proteins to library:
+      for (String const &acc : protein_accessions)
+      {
+        TargetedExperiment::Protein protein;
+        protein.id = acc;
+        library_.addProtein(protein);
+      }
     }
   }
 

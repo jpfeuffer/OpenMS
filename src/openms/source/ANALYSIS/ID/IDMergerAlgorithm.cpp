@@ -433,7 +433,7 @@ namespace OpenMS
       if (idRun.getSearchEngine() != engine || idRun.getSearchEngineVersion() != version)
       {
         ok = false;
-        LOG_WARN << "Search engine " + idRun.getSearchEngine() + " from IDRun " + String(runID) + " does not match "
+       OPENMS_LOG_WARN << "Search engine " + idRun.getSearchEngine() + " from IDRun " + String(runID) + " does not match "
         "with the others. You probably do not want to merge the results with this tool." << std::endl;
         break;
       }
@@ -449,7 +449,7 @@ namespace OpenMS
           params.taxonomy != sp.taxonomy)
       {
         ok = false;
-        LOG_WARN << "Searchengine settings from IDRun " + String(runID) + " does not match with the others."
+       OPENMS_LOG_WARN << "Searchengine settings from IDRun " + String(runID) + " does not match with the others."
         " You probably do not want to merge the results with this tool if they differ significantly." << std::endl;
         break;
       }
@@ -462,7 +462,7 @@ namespace OpenMS
         if (experiment_type != "labeled_MS1")
         {
           ok = false;
-          LOG_WARN << "Used modification settings from IDRun " + String(runID) + " does not match with the others."
+         OPENMS_LOG_WARN << "Used modification settings from IDRun " + String(runID) + " does not match with the others."
           " Since the experiment is not annotated as MS1-labeled "
           "you probably do not want to merge the results with this tool." << std::endl;
           break;
@@ -473,7 +473,7 @@ namespace OpenMS
           //OR put a unique ID for the used mod as a UserParam to the mapList entries (consensusHeaders)
           //TODO actually you would probably need an experimental design here, because
           //settings have to agree exactly in a FractionGroup but can slightly differ across runs.
-          LOG_WARN << "Used modification settings from IDRun " + String(runID) + " does not match with the others."
+         OPENMS_LOG_WARN << "Used modification settings from IDRun " + String(runID) + " does not match with the others."
           " Although it seems to be an MS1-labeled experiment,"
           " check carefully that only non-labelling mods differ." << std::endl;
         }

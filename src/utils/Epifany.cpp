@@ -293,14 +293,14 @@ protected:
     double pre_filter = getDoubleOption_("psm_probability_cutoff");
     if (pre_filter > min_nonnull_obs_probability)
     {
-      LOG_INFO << "Removing PSMs with probability < " << pre_filter << std::endl;
+     OPENMS_LOG_INFO << "Removing PSMs with probability < " << pre_filter << std::endl;
       IDFilter::filterHitsByScore(mergedpeps, pre_filter);
       IDFilter::removeEmptyIdentifications(mergedpeps);
     }
 
     if (mergedpeps.empty())
     {
-      LOG_ERROR << "No PSMs found. Please check input. Aborting." << std::endl;
+     OPENMS_LOG_ERROR << "No PSMs found. Please check input. Aborting." << std::endl;
       return ExitCodes::INCOMPATIBLE_INPUT_DATA;
     }
 
@@ -312,14 +312,14 @@ protected:
     // Alternative would be to reset scores but this does not work well if you wanna work with i.e. user priors
     IDFilter::removeUnreferencedProteins(mergedprots, mergedpeps);
 
-    LOG_INFO << "Loading, merging, filtering took " << sw.toString() << std::endl;
+   OPENMS_LOG_INFO << "Loading, merging, filtering took " << sw.toString() << std::endl;
     sw.reset();
-    LOG_INFO << "Graph now consists of " << mergedprots[0].getHits().size() << " proteins and " << mergedpeps.size() << " peptides." << std::endl;
+   OPENMS_LOG_INFO << "Graph now consists of " << mergedprots[0].getHits().size() << " proteins and " << mergedpeps.size() << " peptides." << std::endl;
 
     BayesianProteinInferenceAlgorithm bpi1(getIntOption_("debug"));
     bpi1.setParameters(epifany_param);
     bpi1.inferPosteriorProbabilities(mergedprots, mergedpeps);
-    LOG_INFO << "Inference total took " << sw.toString() << std::endl;
+   OPENMS_LOG_INFO << "Inference total took " << sw.toString() << std::endl;
     sw.stop();
 
     // Let's always add all the proteins to the protein group section, easier in postprocessing.
@@ -332,7 +332,7 @@ protected:
 
     if (greedy_group_resolution)
     {
-      LOG_INFO << "Postprocessing: Removing associations from spectrum via best PSM to all but the best protein group..." << std::endl;
+     OPENMS_LOG_INFO << "Postprocessing: Removing associations from spectrum via best PSM to all but the best protein group..." << std::endl;
       //TODO add group resolution to the IDBoostGraph class so we do not
       // unnecessarily build a second (old) data structure
 
@@ -344,7 +344,7 @@ protected:
     }
     if (remove_prots_wo_evidence)
     {
-      LOG_INFO << "Postprocessing: Removing proteins without associated evidence..." << std::endl;
+     OPENMS_LOG_INFO << "Postprocessing: Removing proteins without associated evidence..." << std::endl;
       IDFilter::removeUnreferencedProteins(mergedprots, mergedpeps);
       IDFilter::updateProteinGroups(mergedprots[0].getIndistinguishableProteins(), mergedprots[0].getHits());
       IDFilter::updateProteinGroups(mergedprots[0].getProteinGroups(), mergedprots[0].getHits());
@@ -353,7 +353,7 @@ protected:
     bool calc_protFDR = getStringOption_("protein_fdr") == "true";
     if (calc_protFDR)
     {
-      LOG_INFO << "Calculating target-decoy q-values..." << std::endl;
+     OPENMS_LOG_INFO << "Calculating target-decoy q-values..." << std::endl;
       FalseDiscoveryRate fdr;
       Param fdrparam = fdr.getParameters();
       fdrparam.setValue("conservative", getStringOption_("conservative_fdr"));
@@ -361,7 +361,7 @@ protected:
       fdr.applyBasic(mergedprots[0], true);
     }
 
-    LOG_INFO << "Writing inference run as first ProteinIDRun with " <<
+   OPENMS_LOG_INFO << "Writing inference run as first ProteinIDRun with " <<
              mergedprots[0].getHits().size() << " proteins in " <<
              mergedprots[0].getIndistinguishableProteins().size() <<
              " indist. groups." << std::endl;

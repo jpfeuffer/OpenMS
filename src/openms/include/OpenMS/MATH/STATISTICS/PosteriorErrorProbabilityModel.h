@@ -136,13 +136,29 @@ public:
       bool fit(std::vector<double> & search_engine_scores, std::vector<double> & probabilities);
 
       ///Writes the distributions densities into the two vectors for a set of scores. Incorrect_densities represent the incorrectly assigned sequences.
-      void fillDensities(std::vector<double> & x_scores, std::vector<double> & incorrect_density, std::vector<double> & correct_density);
-      ///computes the Maximum Likelihood with a log-likelihood function.
-      double computeMaxLikelihood(std::vector<double> & incorrect_density, std::vector<double> & correct_density);
+      void fillDensities(const std::vector<double> & x_scores, std::vector<double> & incorrect_density, std::vector<double> & correct_density);
+      ///Writes the log distributions densities into the two vectors for a set of scores. Incorrect_densities represent the incorrectly assigned sequences.
+      void fillLogDensities(const std::vector<double> & x_scores, std::vector<double> & incorrect_density, std::vector<double> & correct_density);
+      ///computes the Likelihood with a log-likelihood function.
+      double computeLogLikelihood(const std::vector<double> & incorrect_density, const std::vector<double> & correct_density);
+      /**computes the posteriors for the datapoints to belong to the incorrect distribution
+       * @param incorrect_posterior resulting posteriors
+       * @return the loglikelihood of the model
+       */
+      double computeLLAndIncorrectPosteriorsFromLogDensities(
+          const std::vector<double>& incorrect_log_density,
+          const std::vector<double>& correct_log_density,
+          std::vector<double>& incorrect_posterior);
+
+      std::pair<double, double> pos_neg_mean_weighted_posteriors(const std::vector<double> &x_scores,
+                                                                 const std::vector<double> &incorrect_posteriors);
+      std::pair<double, double> pos_neg_sigma_weighted_posteriors(const std::vector<double> &x_scores,
+                                                                 const std::vector<double> &incorrect_posteriors,
+                                                                 const std::pair<double, double>& means);
       ///sums (1 - posterior probabilities)
-      double one_minus_sum_post(std::vector<double> & incorrect_density, std::vector<double> & correct_density);
+      double one_minus_sum_post(const std::vector<double> & incorrect_density, const std::vector<double> & correct_density);
       ///sums  posterior probabilities
-      double sum_post(std::vector<double> & incorrect_density, std::vector<double> & correct_density);
+      double sum_post(const std::vector<double> & incorrect_density, const std::vector<double> & correct_density);
       ///helper function for the EM algorithm (for fitting)
       double sum_pos_x0(std::vector<double> & x_scores, std::vector<double> & incorrect_density, std::vector<double> & correct_density);
       ///helper function for the EM algorithm (for fitting)

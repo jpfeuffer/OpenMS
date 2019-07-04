@@ -73,9 +73,6 @@
 
 #ifdef _OPENMP
   #include <omp.h>
-  #define NUMBER_OF_THREADS (omp_get_num_threads())
-#else
-  #define NUMBER_OF_THREADS (1)
 #endif
 
 
@@ -173,18 +170,6 @@ namespace OpenMS
   }
 
   // static
-  vector<ResidueModification> SimpleSearchEngineAlgorithm::getModifications_(const StringList& modNames)
-  {
-    vector<ResidueModification> modifications;
-    // iterate over modification names and add to vector
-    for (const String& m : modNames)
-    {
-      modifications.push_back(ModificationsDB::getInstance()->getModification(m));
-    }
-    return modifications;
-  }
-
-  // static
   void SimpleSearchEngineAlgorithm::preprocessSpectra_(PeakMap& exp, double fragment_mass_tolerance, bool fragment_mass_tolerance_unit_ppm)
   {
     // filter MS2 map
@@ -209,7 +194,7 @@ namespace OpenMS
     NLargest nlargest_filter = NLargest(400);
 
 #ifdef _OPENMP
-#pragma omp parallel for
+#pragma omp parallel for default(none) shared(exp, fragment_mass_tolerance, fragment_mass_tolerance_unit_ppm, window_mower_filter, nlargest_filter)
 #endif
     for (SignedSize exp_index = 0; exp_index < (SignedSize)exp.size(); ++exp_index)
     {
@@ -256,7 +241,7 @@ void SimpleSearchEngineAlgorithm::postProcessHits_(const PeakMap& exp,
   {
     // remove all but top n scoring
 #ifdef _OPENMP
-#pragma omp parallel for
+#pragma omp parallel for default(none) shared(annotated_hits, top_hits)
 #endif
     for (SignedSize scan_index = 0; scan_index < (SignedSize)annotated_hits.size(); ++scan_index)
     {
@@ -268,7 +253,7 @@ void SimpleSearchEngineAlgorithm::postProcessHits_(const PeakMap& exp,
     }
 
 #ifdef _OPENMP
-#pragma omp parallel for
+#pragma omp parallel for default(none) shared(annotated_hits, peptide_ids, max_variable_mods_per_peptide)
 #endif
     for (SignedSize scan_index = 0; scan_index < (SignedSize)annotated_hits.size(); ++scan_index)
     {
@@ -447,7 +432,7 @@ void SimpleSearchEngineAlgorithm::postProcessHits_(const PeakMap& exp,
 
     Size count_proteins(0), count_peptides(0);
 
-#pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(static) default(none) shared(count_proteins, precursor_mass_tolerance_unit_ppm, fragment_mass_tolerance_unit_ppm, count_peptides, peptide_motif_regex, spectra, annotated_hits_lock)
       for (SignedSize fasta_index = 0; fasta_index < (SignedSize)fasta_db.size(); ++fasta_index)
       {
 

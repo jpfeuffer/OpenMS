@@ -286,7 +286,7 @@ protected:
 
     if (ms_raw.empty())
     {
-      LOG_WARN << "The given file does not contain any spectra.";
+     OPENMS_LOG_WARN << "The given file does not contain any spectra.";
       return INCOMPATIBLE_INPUT_DATA;
     }
 
@@ -382,7 +382,7 @@ protected:
                   qc_residual_png_path,
                   "Rscript"))
     {
-      LOG_WARN << "\nCalibration failed. See error message above!" << std::endl;          
+     OPENMS_LOG_WARN << "\nCalibration failed. See error message above!" << std::endl;
     }
   }
 
@@ -407,7 +407,7 @@ protected:
 
     double median_fwhm = Math::median(fwhm_1000.begin(), fwhm_1000.end());
 
-    LOG_INFO << "Median chromatographic FWHM: " << median_fwhm << std::endl;
+   OPENMS_LOG_INFO << "Median chromatographic FWHM: " << median_fwhm << std::endl;
 
     return median_fwhm;
   }
@@ -440,7 +440,7 @@ protected:
     const bool progress(true);
     algorithm.run(e, progress);
     seeds = algorithm.getFeatureMap(); 
-    LOG_INFO << "Using " << seeds.size() << " seeds from untargeted feature extraction." << endl;
+   OPENMS_LOG_INFO << "Using " << seeds.size() << " seeds from untargeted feature extraction." << endl;
   }
 
 
@@ -476,7 +476,7 @@ protected:
         {
           t.fitModel(model_type, model_params);
         }
-        t.printSummary(LOG_DEBUG);
+        t.printSummary(OpenMS_Log_debug);
         alignment_stats.emplace_back(t.getStatistics());
       }
 
@@ -484,17 +484,17 @@ protected:
       using TrafoStat = TransformationDescription::TransformationStatistics;
       for (auto & s : alignment_stats)
       {
-         LOG_INFO << "Alignment differences (second) for percentiles (before & after): " << endl;
-         LOG_INFO << "100%\t99%\t95%\t90%\t75%\t50%\t25%" << endl; 
-         LOG_INFO << "before alignment:" << endl; 
-         LOG_INFO << (int)s.percentiles_before[100] << "\t" 
+        OPENMS_LOG_INFO << "Alignment differences (second) for percentiles (before & after): " << endl;
+        OPENMS_LOG_INFO << "100%\t99%\t95%\t90%\t75%\t50%\t25%" << endl;
+        OPENMS_LOG_INFO << "before alignment:" << endl;
+        OPENMS_LOG_INFO << (int)s.percentiles_before[100] << "\t"
                   << (int)s.percentiles_before[99] << "\t" 
                   << (int)s.percentiles_before[95] << "\t" 
                   << (int)s.percentiles_before[90] << "\t" 
                   << (int)s.percentiles_before[50] << "\t" 
                   << (int)s.percentiles_before[25] << endl; 
-         LOG_INFO << "after alignment:" << endl; 
-         LOG_INFO << (int)s.percentiles_after[100] << "\t" 
+        OPENMS_LOG_INFO << "after alignment:" << endl;
+        OPENMS_LOG_INFO << (int)s.percentiles_after[100] << "\t"
                   << (int)s.percentiles_after[99] << "\t" 
                   << (int)s.percentiles_after[95] << "\t" 
                   << (int)s.percentiles_after[90] << "\t" 
@@ -506,7 +506,7 @@ protected:
               [](TrafoStat a, TrafoStat b) 
               { return a.percentiles_after[100] > b.percentiles_after[100]; })->percentiles_after[100];
       // sometimes, very good alignments might lead to bad overall performance. Choose 2 minutes as minimum.
-      LOG_INFO << "Max alignment difference (seconds): " << max_alignment_diff << endl;
+     OPENMS_LOG_INFO << "Max alignment difference (seconds): " << max_alignment_diff << endl;
       max_alignment_diff = std::max(max_alignment_diff, 120.0);
       return max_alignment_diff;
     }
@@ -529,7 +529,7 @@ protected:
             transformations[i]);
         } catch (Exception::IllegalArgument e)
         {
-          LOG_WARN << e.getMessage() << endl;
+         OPENMS_LOG_WARN << e.getMessage() << endl;
         }
           
         if (debug_level_ > 666)
@@ -574,7 +574,7 @@ protected:
 */
     linker.setParameters(fl_param);      
     linker.group(feature_maps, consensus_fraction);
-    LOG_INFO << "Size of consensus fraction: " << consensus_fraction.size() << endl;
+   OPENMS_LOG_INFO << "Size of consensus fraction: " << consensus_fraction.size() << endl;
     assert(!consensus_fraction.empty());
   }
 
@@ -706,7 +706,7 @@ protected:
         ++n_transferred_ids;
       }
     }
-    LOG_INFO << "Transfered IDs: " << n_transferred_ids << endl;
+   OPENMS_LOG_INFO << "Transfered IDs: " << n_transferred_ids << endl;
     return transfer_ids;
   }
  
@@ -774,7 +774,7 @@ protected:
 
       if (protein_ids.size() != 1)
       {
-        LOG_FATAL_ERROR << "Exactly one protein identification runs must be annotated in " << id_file_abs_path << endl;
+       OPENMS_LOG_FATAL_ERROR << "Exactly one protein identification runs must be annotated in " << id_file_abs_path << endl;
         return ExitCodes::INCOMPATIBLE_INPUT_DATA;
       }
 
@@ -783,7 +783,7 @@ protected:
       protein_ids[0].getPrimaryMSRunPath(id_msfile_ref);
       if (id_msfile_ref.empty())
       {
-        LOG_DEBUG << "MS run path not set in ID file." << endl;
+       OPENMS_LOG_DEBUG << "MS run path not set in ID file." << endl;
       }
       else
       {
@@ -809,7 +809,7 @@ protected:
         }
         else
         {
-          LOG_WARN << "Peptide ID identifier found not present in the protein ID" << endl;
+         OPENMS_LOG_WARN << "Peptide ID identifier found not present in the protein ID" << endl;
         }
       }
 
@@ -826,8 +826,8 @@ protected:
       // reannotate spectrum references if missing
       if (missing_spec_ref)
       {
-        LOG_WARN << "The identification files don't contain a meta value with the spectrum native id." << endl;
-        LOG_WARN << "OpenMS will try to reannotate them by matching retention times between id and spectra." << endl;
+       OPENMS_LOG_WARN << "The identification files don't contain a meta value with the spectrum native id." << endl;
+       OPENMS_LOG_WARN << "OpenMS will try to reannotate them by matching retention times between id and spectra." << endl;
 
         SpectrumMetaDataLookup::addMissingSpectrumReferences(
           peptide_ids, 
@@ -1091,7 +1091,7 @@ protected:
         const String& mz_file_abs_path = File::absolutePath(mz_file);
         if (mzfile2idfile.find(mz_file_abs_path) == mzfile2idfile.end())
         {
-          LOG_FATAL_ERROR << "MzML file in experimental design file '"
+         OPENMS_LOG_FATAL_ERROR << "MzML file in experimental design file '"
             << mz_file_abs_path << "'not passed as 'in' parameter.\n" 
             << "Note: relative paths in the experimental design file "
             << "are resolved relative to the design file path. \n"
@@ -1143,7 +1143,7 @@ protected:
         
       if (getStringOption_("transfer_ids") != "false")
       {  
-        LOG_INFO << "Transferring identification data between runs of the same fraction." << endl;
+       OPENMS_LOG_INFO << "Transferring identification data between runs of the same fraction." << endl;
         // needs to occur in >= 50% of all runs for transfer
         const Size min_occurrance = (ms_files.second.size() + 1) / 2;
         multimap<Size, PeptideIdentification> transfered_ids = transferIDsBetweenSameFraction_(consensus_fraction, min_occurrance);
@@ -1483,7 +1483,7 @@ protected:
     auto const & protein_quants = quantifier.getProteinResults();
     if (protein_quants.empty())
     {        
-      LOG_WARN << "Warning: No proteins were quantified." << endl;
+     OPENMS_LOG_WARN << "Warning: No proteins were quantified." << endl;
     }
 
     if (debug_level_ >= 666)
@@ -1562,7 +1562,7 @@ protected:
       // shrink protein runs to the one containing the inference data
       consensus.getProteinIdentifications().resize(1);
 
-      msstats.store(
+      msstats.storeLFQ(
         out_msstats, 
         consensus, 
         design, 

@@ -227,7 +227,7 @@ namespace OpenMS
         auto accToPHit = accession_map.find(std::string(proteinAcc));
         if (accToPHit == accession_map.end())
         {
-          LOG_WARN << "Warning: Building graph: skipping pep that maps to a non existent protein accession." << std::endl;
+         OPENMS_LOG_WARN << "Warning: Building graph: skipping pep that maps to a non existent protein accession." << std::endl;
           continue;
         }
         //TODO consider/calculate missing digests. Probably not here though!
@@ -289,7 +289,7 @@ namespace OpenMS
         auto accToPHit = accession_map.find(std::string(proteinAcc));
         if (accToPHit == accession_map.end())
         {
-          LOG_WARN << "Warning: Building graph: skipping pep that maps to a non existent protein accession." << std::endl;
+         OPENMS_LOG_WARN << "Warning: Building graph: skipping pep that maps to a non existent protein accession." << std::endl;
           continue;
         }
         //TODO consider/calculate missing digests. Probably not here though!
@@ -511,7 +511,7 @@ namespace OpenMS
 
     if (proteins.empty()) // we do not allow an empty database
     {
-      LOG_ERROR << "Error: An empty database was provided. Mapping makes no sense. Aborting..." << std::endl;
+     OPENMS_LOG_ERROR << "Error: An empty database was provided. Mapping makes no sense. Aborting..." << std::endl;
       //TODO throw Exception
     }
 
@@ -625,14 +625,14 @@ namespace OpenMS
       Graph& curr_cc = ccs_.at(i);
 
       #ifdef INFERENCE_MT_DEBUG
-      LOG_INFO << "Processing on thread# " << omp_get_thread_num() << std::endl;
+     OPENMS_LOG_INFO << "Processing on thread# " << omp_get_thread_num() << std::endl;
       #endif
 
       #ifdef INFERENCE_DEBUG
-      LOG_INFO << "Processing cc " << i << " with " << boost::num_vertices(curr_cc) << " vertices." << std::endl;
-      LOG_INFO << "Printing cc " << i << std::endl;
+     OPENMS_LOG_INFO << "Processing cc " << i << " with " << boost::num_vertices(curr_cc) << " vertices." << std::endl;
+     OPENMS_LOG_INFO << "Printing cc " << i << std::endl;
       printGraph(LOG_INFO, curr_cc);
-      LOG_INFO << "Printed cc " << i << std::endl;
+     OPENMS_LOG_INFO << "Printed cc " << i << std::endl;
       #endif
 
       unsigned long result = functor(curr_cc);
@@ -672,10 +672,10 @@ namespace OpenMS
       Graph& curr_cc = ccs_.at(i);
 
       #ifdef INFERENCE_DEBUG
-      LOG_INFO << "Processing cc " << i << " with " << boost::num_vertices(curr_cc) << " vertices." << std::endl;
-      LOG_INFO << "Printing cc " << i << std::endl;
+     OPENMS_LOG_INFO << "Processing cc " << i << " with " << boost::num_vertices(curr_cc) << " vertices." << std::endl;
+     OPENMS_LOG_INFO << "Printing cc " << i << std::endl;
       printGraph(LOG_INFO, curr_cc);
-      LOG_INFO << "Printed cc " << i << std::endl;
+     OPENMS_LOG_INFO << "Printed cc " << i << std::endl;
       #endif
 
       functor(curr_cc);
@@ -724,14 +724,14 @@ namespace OpenMS
         const Graph& curr_cc = ccs_.at(i);
 
         #ifdef INFERENCE_MT_DEBUG
-        LOG_INFO << "Processing on thread# " << omp_get_thread_num() << std::endl;
+       OPENMS_LOG_INFO << "Processing on thread# " << omp_get_thread_num() << std::endl;
         #endif
 
         #ifdef INFERENCE_DEBUG
-        LOG_INFO << "Processing cc " << i << " with " << boost::num_vertices(curr_cc) << " vertices." << std::endl;
-        LOG_INFO << "Printing cc " << i << std::endl;
+       OPENMS_LOG_INFO << "Processing cc " << i << " with " << boost::num_vertices(curr_cc) << " vertices." << std::endl;
+       OPENMS_LOG_INFO << "Printing cc " << i << std::endl;
         printGraph(LOG_INFO, curr_cc);
-        LOG_INFO << "Printed cc " << i << std::endl;
+       OPENMS_LOG_INFO << "Printed cc " << i << std::endl;
         #endif
 
         annotateIndistProteins_(curr_cc, addSingletons);
@@ -767,14 +767,14 @@ namespace OpenMS
         const Graph& curr_cc = ccs_.at(i);
 
         #ifdef INFERENCE_MT_DEBUG
-        LOG_INFO << "Processing on thread# " << omp_get_thread_num() << std::endl;
+       OPENMS_LOG_INFO << "Processing on thread# " << omp_get_thread_num() << std::endl;
         #endif
 
         #ifdef INFERENCE_DEBUG
-        LOG_INFO << "Processing cc " << i << " with " << boost::num_vertices(curr_cc) << " vertices." << std::endl;
-        LOG_INFO << "Printing cc " << i << std::endl;
+       OPENMS_LOG_INFO << "Processing cc " << i << " with " << boost::num_vertices(curr_cc) << " vertices." << std::endl;
+       OPENMS_LOG_INFO << "Printing cc " << i << std::endl;
         printGraph(LOG_INFO, curr_cc);
-        LOG_INFO << "Printed cc " << i << std::endl;
+       OPENMS_LOG_INFO << "Printed cc " << i << std::endl;
         #endif
 
         calculateAndAnnotateIndistProteins_(curr_cc, addSingletons);
@@ -1000,16 +1000,16 @@ namespace OpenMS
     {
       Graph& curr_cc = ccs_.at(i);
 
-      LOG_INFO << "Processing cc " << i << " with " << boost::num_vertices(curr_cc) << " vertices." << std::endl;
+     OPENMS_LOG_INFO << "Processing cc " << i << " with " << boost::num_vertices(curr_cc) << " vertices." << std::endl;
 
       #ifdef INFERENCE_MT_DEBUG
-      LOG_INFO << "Processing on thread# " << omp_get_thread_num() << std::endl;
+     OPENMS_LOG_INFO << "Processing on thread# " << omp_get_thread_num() << std::endl;
       #endif
 
       #ifdef INFERENCE_DEBUG
-      LOG_INFO << "Printing cc " << i << std::endl;
+     OPENMS_LOG_INFO << "Printing cc " << i << std::endl;
       printGraph(LOG_INFO, curr_cc);
-      LOG_INFO << "Printed cc " << i << std::endl;
+     OPENMS_LOG_INFO << "Printed cc " << i << std::endl;
       #endif
 
       // Skip cc without peptide or protein
@@ -1144,15 +1144,15 @@ namespace OpenMS
         }
 
         #ifdef INFERENCE_DEBUG
-        LOG_INFO << "Printing cc " << i << "with intermediate nodes." << std::endl;
+       OPENMS_LOG_INFO << "Printing cc " << i << "with intermediate nodes." << std::endl;
         printGraph(LOG_INFO, curr_cc);
-        LOG_INFO << "Printed cc " << i << "with intermediate nodes." << std::endl;
+       OPENMS_LOG_INFO << "Printed cc " << i << "with intermediate nodes." << std::endl;
         #endif
 
       }
       else
       {
-        LOG_INFO << "Skipped cc with only one type (proteins or peptides)" << std::endl;
+       OPENMS_LOG_INFO << "Skipped cc with only one type (proteins or peptides)" << std::endl;
       }
     }
   }*/
@@ -1189,14 +1189,14 @@ namespace OpenMS
       Graph& curr_cc = ccs_[i];
 
       #ifdef INFERENCE_MT_DEBUG
-      LOG_INFO << "Processing on thread# " << omp_get_thread_num() << std::endl;
+     OPENMS_LOG_INFO << "Processing on thread# " << omp_get_thread_num() << std::endl;
       #endif
 
       #ifdef INFERENCE_DEBUG
-      LOG_INFO << "Processing cc " << i << " with " << boost::num_vertices(curr_cc) << " vertices." << std::endl;
-      LOG_INFO << "Printing cc " << i << std::endl;
+     OPENMS_LOG_INFO << "Processing cc " << i << " with " << boost::num_vertices(curr_cc) << " vertices." << std::endl;
+     OPENMS_LOG_INFO << "Printing cc " << i << std::endl;
       printGraph(LOG_INFO, curr_cc);
-      LOG_INFO << "Printed cc " << i << std::endl;
+     OPENMS_LOG_INFO << "Printed cc " << i << std::endl;
       #endif
 
       // Skip cc without peptide or protein
@@ -1361,15 +1361,15 @@ namespace OpenMS
         }
 
         #ifdef INFERENCE_DEBUG
-        LOG_INFO << "Printing cc " << i << "with intermediate nodes." << std::endl;
+       OPENMS_LOG_INFO << "Printing cc " << i << "with intermediate nodes." << std::endl;
         printGraph(LOG_INFO, curr_cc);
-        LOG_INFO << "Printed cc " << i << "with intermediate nodes." << std::endl;
+       OPENMS_LOG_INFO << "Printed cc " << i << "with intermediate nodes." << std::endl;
         #endif
 
       }
       else
       {
-        LOG_INFO << "Skipped cc with only one type (proteins or peptides)" << std::endl;
+       OPENMS_LOG_INFO << "Skipped cc with only one type (proteins or peptides)" << std::endl;
       }
     }
   }
@@ -1388,14 +1388,14 @@ namespace OpenMS
       Graph& curr_cc = ccs_[i];
 
       #ifdef INFERENCE_MT_DEBUG
-      LOG_INFO << "Processing on thread# " << omp_get_thread_num() << std::endl;
+     OPENMS_LOG_INFO << "Processing on thread# " << omp_get_thread_num() << std::endl;
       #endif
 
       #ifdef INFERENCE_DEBUG
-      LOG_INFO << "Processing cc " << i << " with " << boost::num_vertices(curr_cc) << " vertices." << std::endl;
-      LOG_INFO << "Printing cc " << i << std::endl;
+     OPENMS_LOG_INFO << "Processing cc " << i << " with " << boost::num_vertices(curr_cc) << " vertices." << std::endl;
+     OPENMS_LOG_INFO << "Printing cc " << i << std::endl;
       printGraph(LOG_INFO, curr_cc);
-      LOG_INFO << "Printed cc " << i << std::endl;
+     OPENMS_LOG_INFO << "Printed cc " << i << std::endl;
       #endif
 
       // Skip cc without peptide or protein
@@ -1528,15 +1528,15 @@ namespace OpenMS
         }
 
         #ifdef INFERENCE_DEBUG
-        LOG_INFO << "Printing cc " << i << "with intermediate nodes." << std::endl;
+       OPENMS_LOG_INFO << "Printing cc " << i << "with intermediate nodes." << std::endl;
         printGraph(LOG_INFO, curr_cc);
-        LOG_INFO << "Printed cc " << i << "with intermediate nodes." << std::endl;
+       OPENMS_LOG_INFO << "Printed cc " << i << "with intermediate nodes." << std::endl;
         #endif
 
       }
       else
       {
-        LOG_INFO << "Skipped cc with only one type (proteins or peptides)" << std::endl;
+       OPENMS_LOG_INFO << "Skipped cc with only one type (proteins or peptides)" << std::endl;
       }
     }
   }
@@ -1547,7 +1547,7 @@ namespace OpenMS
   {
     auto vis = dfs_ccsplit_visitor(ccs_);
     boost::depth_first_search(g, visitor(vis));
-    LOG_INFO << "Found " << ccs_.size() << " connected components." << std::endl;
+   OPENMS_LOG_INFO << "Found " << ccs_.size() << " connected components." << std::endl;
     #ifdef INFERENCE_BENCH
     sizes_and_times_.resize(ccs_.size());
     #endif

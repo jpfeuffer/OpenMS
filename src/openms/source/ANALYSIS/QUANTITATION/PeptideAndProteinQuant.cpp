@@ -162,7 +162,10 @@ namespace OpenMS
     // if inference results are given, filter quant. data accordingly:
     if (!pep_info.empty())
     {
-      if (pep_quant_.empty()) { LOG_ERROR << "No peptides quantified (pep_quant_ is empty)!" << endl; }
+      if (pep_quant_.empty())
+      {
+        OPENMS_LOG_ERROR << "No peptides quantified (pep_quant_ is empty)!" << endl;
+      }
 
       PeptideQuant filtered;
 
@@ -345,7 +348,7 @@ namespace OpenMS
   {
     if (pep_quant_.empty())
     {
-      LOG_WARN << "Warning: No peptides quantified." << endl;
+      OPENMS_LOG_WARN << "Warning: No peptides quantified." << endl;
     }
 
     // if information about (indistinguishable) protein groups is available, map
@@ -531,7 +534,7 @@ namespace OpenMS
 
     if (consensus.empty())
     {
-      LOG_ERROR << "Empty consensus map passed to readQuantData." << endl;
+      OPENMS_LOG_ERROR << "Empty consensus map passed to readQuantData." << endl;
       return;
     }
 
@@ -539,10 +542,10 @@ namespace OpenMS
     stats_.n_fractions = ed.getNumberOfFractions();
     stats_.n_ms_files = ed.getNumberOfMSFiles();
 
-    LOG_DEBUG << "Reading quant data: " << endl;
-    LOG_DEBUG << "  MS files        : " << stats_.n_ms_files << endl;
-    LOG_DEBUG << "  Fractions       : " << stats_.n_fractions << endl;
-    LOG_DEBUG << "  Samples (Assays): " << stats_.n_samples << endl;    
+    OPENMS_LOG_DEBUG << "Reading quant data: " << endl;
+    OPENMS_LOG_DEBUG << "  MS files        : " << stats_.n_ms_files << endl;
+    OPENMS_LOG_DEBUG << "  Fractions       : " << stats_.n_fractions << endl;
+    OPENMS_LOG_DEBUG << "  Samples (Assays): " << stats_.n_samples << endl;
 
     for (auto & c : consensus)
     {

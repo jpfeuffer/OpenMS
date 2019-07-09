@@ -98,13 +98,13 @@ class TOPPProteinInference :
 public:
   TOPPProteinInference() :
     TOPPBase("ProteinInference", "Protein inference based on an aggregation of the scores of the identified peptides.")
-  {
-  }
+    {}
 
 protected:
 
   void registerOptionsAndFlags_() override
   {
+    //TODO allow consensusXML version
     registerInputFileList_("in", "<file>", StringList(), "input file(s)");
     setValidFormats_("in", ListUtils::create<String>("idXML"));
     registerOutputFile_("out", "<file>", "", "output file");
@@ -125,7 +125,6 @@ protected:
                           "The number of top scoring PSMs per spectrum to consider. 0 means all.", false);
     setMinInt_("nr_psms_per_spectrum", 0);*/
 
-
     addEmptyLine_();
 
     Param merger_with_subsection;
@@ -135,6 +134,7 @@ protected:
     Param algo_with_subsection;
     algo_with_subsection.insert("Algorithm:", BasicProteinInferenceAlgorithm().getDefaults());
     registerFullParam_(algo_with_subsection);
+
   }
 
 
@@ -149,14 +149,7 @@ protected:
     String out = getStringOption_("out");
 
     // load identifications
-
-    std::cout << "Loading input..." << std::endl;
-    //TODO allow keep_best_pepmatch_only option during merging (Peptide-level datastructure would help a lot,
-    // otherwise you need to build a map of peptides everytime you want to quickly check if the peptide is already
-    // present. If )
-    //TODO allow experimental design aware merging
-    //TODO allow consensusXML version
-    IDMergerAlgorithm merger{String("all_merged")};
+    OPENMS_LOG_INFO << "Loading input..." << std::endl;
 
     vector<ProteinIdentification> inferred_protein_ids{1};
     vector<PeptideIdentification> inferred_peptide_ids;
@@ -164,12 +157,19 @@ protected:
     IdXMLFile f;
     if (merge_runs)
     {
+      //TODO allow keep_best_pepmatch_only option during merging (Peptide-level datastructure would help a lot,
+      // otherwise you need to build a map of peptides everytime you want to quickly check if the peptide is already
+      // present)
+      //TODO allow experimental design aware merging
+      IDMergerAlgorithm merger{String("all_merged")};
+      merger.setParameters(getParam_().copy("Merging:", true));
+
       for (const auto &idfile : in)
       {
         vector<ProteinIdentification> protein_ids;
         vector<PeptideIdentification> peptide_ids;
         f.load(idfile, protein_ids, peptide_ids);
-        merger.insertRun(protein_ids, peptide_ids);
+        merger.insertRun(std::move(protein_ids), std::move(peptide_ids));
       }
       merger.returnResultsAndClear(inferred_protein_ids[0], inferred_peptide_ids);
     }
@@ -177,15 +177,15 @@ protected:
     {
       f.load(in[0], inferred_protein_ids, inferred_peptide_ids);
     }
-    std::cout << "Loading input took " << sw.toString() << std::endl;
+    OPENMS_LOG_INFO << "Loading input took " << sw.toString() << std::endl;
     sw.reset();
 
 
-    std::cout << "Aggregating protein scores..." << std::endl;
+    OPENMS_LOG_INFO << "Aggregating protein scores..." << std::endl;
     BasicProteinInferenceAlgorithm pi;
     pi.setParameters(getParam_().copy("Algorithm:", true));
     pi.run(inferred_peptide_ids, inferred_protein_ids);
-    std::cout << "Aggregating protein scores took " << sw.toString() << std::endl;
+    OPENMS_LOG_INFO << "Aggregating protein scores took " << sw.toString() << std::endl;
     sw.clear();
 
     bool annotate_indist_groups = getStringOption_("annotate_indist_groups") == "true";
@@ -201,18 +201,18 @@ protected:
                        /*static_cast<Size>(getIntOption_("nr_psms_per_spectrum"))*/, false};
       sw.start();
       //TODO allow computation without splitting into components. Might be worthwhile in some cases
-      std::cout << "Splitting into connected components..." << std::endl;
+      OPENMS_LOG_INFO << "Splitting into connected components..." << std::endl;
       ibg.computeConnectedComponents();
-      std::cout << "Splitting into connected components took " << sw.toString() << std::endl;
+      OPENMS_LOG_INFO << "Splitting into connected components took " << sw.toString() << std::endl;
       sw.clear();
       ibg.annotateIndistProteins(true);
     }
 
-    std::cout << "Storing output..." << std::endl;
+    OPENMS_LOG_INFO << "Storing output..." << std::endl;
     sw.start();
     // write output
     IdXMLFile().store(out, inferred_protein_ids, inferred_peptide_ids);
-    std::cout << "Storing output took " << sw.toString() << std::endl;
+    OPENMS_LOG_INFO << "Storing output took " << sw.toString() << std::endl;
     sw.stop();
 
     return EXECUTION_OK;

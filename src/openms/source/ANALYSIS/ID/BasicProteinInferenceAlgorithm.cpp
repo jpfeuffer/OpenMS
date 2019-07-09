@@ -173,8 +173,8 @@ namespace OpenMS
     acc_to_protein_hitP_and_count.clear();
     best_pep.clear();
 
-    ProteinIdentification::SearchParameters sp = prot_run.getSearchParameters();
     prot_run.setInferenceEngine("TOPPProteinInference");
+    ProteinIdentification::SearchParameters sp = prot_run.getSearchParameters();
     sp.setMetaValue("TOPPProteinInference:aggregation_method", aggMethodString);
     sp.setMetaValue("TOPPProteinInference:use_shared_peptides", use_shared_peptides);
     sp.setMetaValue("TOPPProteinInference:treat_charge_variants_separately", treat_charge_variants_separately);

@@ -41,6 +41,7 @@
 
 #include <vector>
 #include <map>
+#include "GumbelMaxLikelihoodFitter.h"
 
 namespace OpenMS
 {
@@ -125,6 +126,7 @@ public:
           @note the vector is sorted from smallest to biggest value!
       */
       bool fit(std::vector<double> & search_engine_scores);
+      bool fitGumbelGauss(std::vector<double>& search_engine_scores);
 
       /**
           @brief fits the distributions to the data points(search_engine_scores) and writes the computed probabilities into the given vector (the second one).
@@ -139,6 +141,8 @@ public:
       void fillDensities(const std::vector<double> & x_scores, std::vector<double> & incorrect_density, std::vector<double> & correct_density);
       ///Writes the log distributions densities into the two vectors for a set of scores. Incorrect_densities represent the incorrectly assigned sequences.
       void fillLogDensities(const std::vector<double> & x_scores, std::vector<double> & incorrect_density, std::vector<double> & correct_density);
+      ///Writes the log distributions of gumbel and gauss densities into the two vectors for a set of scores. Incorrect_densities represent the incorrectly assigned sequences.
+      void fillLogDensitiesGumbel(const std::vector<double> & x_scores, std::vector<double> & incorrect_density, std::vector<double> & correct_density);
       ///computes the Likelihood with a log-likelihood function.
       double computeLogLikelihood(const std::vector<double> & incorrect_density, const std::vector<double> & correct_density);
       /**computes the posteriors for the datapoints to belong to the incorrect distribution
@@ -155,19 +159,6 @@ public:
       std::pair<double, double> pos_neg_sigma_weighted_posteriors(const std::vector<double> &x_scores,
                                                                  const std::vector<double> &incorrect_posteriors,
                                                                  const std::pair<double, double>& means);
-      ///sums (1 - posterior probabilities)
-      double one_minus_sum_post(const std::vector<double> & incorrect_density, const std::vector<double> & correct_density);
-      ///sums  posterior probabilities
-      double sum_post(const std::vector<double> & incorrect_density, const std::vector<double> & correct_density);
-      ///helper function for the EM algorithm (for fitting)
-      double sum_pos_x0(std::vector<double> & x_scores, std::vector<double> & incorrect_density, std::vector<double> & correct_density);
-      ///helper function for the EM algorithm (for fitting)
-      double sum_neg_x0(std::vector<double> & x_scores, std::vector<double> & incorrect_density, std::vector<double> & correct_density);
-      ///helper function for the EM algorithm (for fitting)
-      double sum_pos_sigma(std::vector<double> & x_scores, std::vector<double> & incorrect_density, std::vector<double> & correct_density, double positive_mean);
-      ///helper function for the EM algorithm (for fitting)
-      double sum_neg_sigma(std::vector<double> & x_scores, std::vector<double> & incorrect_density, std::vector<double> & correct_density, double positive_mean);
-
 
       ///returns estimated parameters for correctly assigned sequences. Fit should be used before.
       GaussFitter::GaussFitResult getCorrectlyAssignedFitResult() const
@@ -179,6 +170,12 @@ public:
       GaussFitter::GaussFitResult getIncorrectlyAssignedFitResult() const
       {
         return incorrectly_assigned_fit_param_;
+      }
+
+      ///returns estimated parameters for correctly assigned sequences. Fit should be used before.
+      GumbelMaxLikelihoodFitter::GumbelDistributionFitResult getIncorrectlyAssignedGumbelFitResult() const
+      {
+        return incorrectly_assigned_fit_gumbel_param_;
       }
 
       ///returns the estimated negative prior probability.
@@ -234,6 +231,7 @@ private:
       PosteriorErrorProbabilityModel(const PosteriorErrorProbabilityModel & rhs);
       ///stores parameters for incorrectly assigned sequences. If gumbel fit was used, A can be ignored. Furthermore, in this case, x0 and sigma are the local parameter alpha and scale parameter beta, respectively.
       GaussFitter::GaussFitResult incorrectly_assigned_fit_param_;
+      GumbelMaxLikelihoodFitter::GumbelDistributionFitResult incorrectly_assigned_fit_gumbel_param_;
       ///stores gauss parameters
       GaussFitter::GaussFitResult correctly_assigned_fit_param_;
       ///stores final prior probability for negative peptides

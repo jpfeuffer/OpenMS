@@ -73,9 +73,6 @@
 
 #ifdef _OPENMP
   #include <omp.h>
-  #define NUMBER_OF_THREADS (omp_get_num_threads())
-#else
-  #define NUMBER_OF_THREADS (1)
 #endif
 
 
@@ -144,10 +141,9 @@ class SimpleSearchEngine :
       setValidFormats_("out", ListUtils::create<String>("idXML"));
 
       // put search algorithm parameters at Search: subtree of parameters
-      Param sse_defaults = SimpleSearchEngineAlgorithm().getDefaults();
-      Param combined;
-      combined.insert("Search:", sse_defaults);
-      registerFullParam_(sse_defaults);
+      Param search_algo_params_with_subsection;
+      search_algo_params_with_subsection.insert("Search:", SimpleSearchEngineAlgorithm().getDefaults());
+      registerFullParam_(search_algo_params_with_subsection);
     }
 
     ExitCodes main_(int, const char**) override
@@ -164,7 +160,13 @@ class SimpleSearchEngine :
 
       SimpleSearchEngineAlgorithm sse;
       sse.setParameters(getParam_().copy("Search:", true));
+      //TODO ??? Why not use the TOPPBase ExitCodes?
+      // same for OpenPepXL etc. Otherwise please write a proper mapping.
       SimpleSearchEngineAlgorithm::ExitCodes e = sse.search(in, database, protein_ids, peptide_ids);
+      if (e != SimpleSearchEngineAlgorithm::ExitCodes::EXECUTION_OK)
+      {
+        return TOPPBase::ExitCodes::INTERNAL_ERROR;
+      }
 
       IdXMLFile().store(out, protein_ids, peptide_ids);
 

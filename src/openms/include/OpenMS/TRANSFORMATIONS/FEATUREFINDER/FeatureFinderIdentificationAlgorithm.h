@@ -63,7 +63,7 @@ public:
   /// in which case no machine learning or FDR estimation will be performed.
   void run(
     std::vector<PeptideIdentification> peptides,
-    std::vector<ProteinIdentification> proteins,
+    const std::vector<ProteinIdentification>& proteins,
     std::vector<PeptideIdentification> peptides_ext,
     std::vector<ProteinIdentification> proteins_ext,
     FeatureMap& features,

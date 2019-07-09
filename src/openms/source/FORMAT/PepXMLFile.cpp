@@ -562,20 +562,17 @@ namespace OpenMS
           }
           else if (search_engine_name == "Percolator")
           {
-            double pep_score = 0.0;
-            if (h.metaValueExists("MS:1001493"))
+            double svm_score = 0.0;
+            if (h.metaValueExists("MS:1001492"))
             {
-              pep_score = static_cast<double>(h.getMetaValue("MS:1001493"));
+              svm_score = static_cast<double>(h.getMetaValue("MS:1001492"));
+              f << "\t\t\t<search_score" << " name=\"Percolator_score\" value=\"" << svm_score << "\"" << "/>\n";
             }
-            else if (h.metaValueExists("Percolator_PEP"))
+            else if (h.metaValueExists("Percolator_score"))
             {
-              pep_score = static_cast<double>(h.getMetaValue("Percolator_PEP"));
+              svm_score = static_cast<double>(h.getMetaValue("Percolator_score"));
+              f << "\t\t\t<search_score" << " name=\"Percolator_score\" value=\"" << svm_score << "\"" << "/>\n";
             }
-            else
-            {
-              throw Exception::MissingInformation(__FILE__,__LINE__,OPENMS_PRETTY_FUNCTION,"Percolator PEP score missing for pepXML export of Percolator results.");
-            }
-            f << "\t\t\t<search_score" << " name=\"Percolator_PEP\" value=\"" << pep_score << "\"" << "/>\n";
 
             double qval_score = 0.0;
             if (h.metaValueExists("MS:1001491"))
@@ -589,17 +586,24 @@ namespace OpenMS
               f << "\t\t\t<search_score" << " name=\"Percolator_qvalue\" value=\"" << qval_score << "\"" << "/>\n";
             }
 
-            double svm_score = 0.0;
-            if (h.metaValueExists("MS:1001492"))
+            double pep_score = 0.0;
+            if (it->getScoreType() == "Posterior Error Probability" || it->getScoreType() == "pep")
             {
-              svm_score = static_cast<double>(h.getMetaValue("MS:1001492"));
-              f << "\t\t\t<search_score" << " name=\"Percolator_score\" value=\"" << svm_score << "\"" << "/>\n";
+              pep_score = h.getScore();
             }
-            else if (h.metaValueExists("Percolator_score"))
+            else if (h.metaValueExists("MS:1001493"))
             {
-              svm_score = static_cast<double>(h.getMetaValue("Percolator_score"));
-              f << "\t\t\t<search_score" << " name=\"Percolator_score\" value=\"" << svm_score << "\"" << "/>\n";
+              pep_score = static_cast<double>(h.getMetaValue("MS:1001493"));
             }
+            else if (h.metaValueExists("Percolator_PEP"))
+            {
+              pep_score = static_cast<double>(h.getMetaValue("Percolator_PEP"));
+            }
+            else
+            {
+              throw Exception::MissingInformation(__FILE__,__LINE__,OPENMS_PRETTY_FUNCTION,"Percolator PEP score missing for pepXML export of Percolator results.");
+            }
+            f << "\t\t\t<search_score" << " name=\"Percolator_PEP\" value=\"" << pep_score << "\"" << "/>\n";
 
             double probability = 1.0 - pep_score;
             f << "\t\t\t<analysis_result" << " analysis=\"peptideprophet\">\n";
@@ -607,11 +611,8 @@ namespace OpenMS
             f << " all_ntt_prob=\"(0.0000,0.0000," << probability << ")\"/>\n";
             f << "\t\t\t</analysis_result>" << "\n";
           }
-          else
-          {
-            f << "\t\t\t<search_score" << " name=\"" << it->getScoreType() << "\" value=\"" << h.getScore() << "\"" << "/>\n";
-          }
-          if (it->getScoreType() == "Posterior Error Probability" || it->getScoreType() == "pep")
+          // Any search engine with a PEP (e.g. also our IDPEP)
+          else if (it->getScoreType() == "Posterior Error Probability" || it->getScoreType() == "pep")
           {
             f << "\t\t\t<search_score" << " name=\"" << it->getScoreType() << "\" value=\"" << h.getScore() << "\"" << "/>\n";
             double probability = 1.0 - h.getScore();
@@ -620,6 +621,12 @@ namespace OpenMS
             f << " all_ntt_prob=\"(0.0000,0.0000," << probability << ")\"/>\n";
             f << "\t\t\t</analysis_result>" << "\n";
           }
+          // Anything else
+          else
+          {
+            f << "\t\t\t<search_score" << " name=\"" << it->getScoreType() << "\" value=\"" << h.getScore() << "\"" << "/>\n";
+          }
+
         }
         f << "\t\t</search_hit>" << "\n";
         f << "\t</search_result>" << "\n";

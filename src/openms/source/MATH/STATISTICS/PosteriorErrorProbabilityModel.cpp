@@ -49,7 +49,7 @@
 #include <boost/math/special_functions/fpclassify.hpp>
 
 #include <algorithm>
-
+#include <OpenMS/MATH/STATISTICS/GumbelMaxLikelihoodFitter.h>
 
 
 using namespace std;
@@ -61,6 +61,7 @@ namespace OpenMS
     PosteriorErrorProbabilityModel::PosteriorErrorProbabilityModel() :
       DefaultParamHandler("PosteriorErrorProbabilityModel"),
       incorrectly_assigned_fit_param_(GaussFitter::GaussFitResult(-1, -1, -1)),
+      incorrectly_assigned_fit_gumbel_param_(GumbelMaxLikelihoodFitter::GumbelDistributionFitResult(-1,-1)),
       correctly_assigned_fit_param_(GaussFitter::GaussFitResult(-1, -1, -1)),
       negative_prior_(0.5), max_incorrectly_(0), max_correctly_(0), smallest_score_(0)
     {
@@ -76,6 +77,171 @@ namespace OpenMS
     }
 
     PosteriorErrorProbabilityModel::~PosteriorErrorProbabilityModel() = default;
+
+    bool PosteriorErrorProbabilityModel::fitGumbelGauss(std::vector<double>& search_engine_scores)
+    {
+      // nothing to fit?
+      if (search_engine_scores.empty()) { return false; }
+
+      //-------------------------------------------------------------
+      // Initializing Parameters
+      //-------------------------------------------------------------
+      sort(search_engine_scores.begin(), search_engine_scores.end());
+
+      smallest_score_ = search_engine_scores[0];
+
+      vector<double> x_scores{search_engine_scores};
+
+      //transform to a positive range
+      for (double & d : x_scores) { d += fabs(smallest_score_) + 0.001; }
+
+      incorrectly_assigned_fit_gumbel_param_.a = Math::mean(x_scores.begin(), x_scores.begin() + ceil(0.5 * x_scores.size())) + x_scores[0];
+      incorrectly_assigned_fit_gumbel_param_.b = Math::sd(x_scores.begin(), x_scores.end(), incorrectly_assigned_fit_gumbel_param_.a);
+      negative_prior_ = 0.7;
+
+      getNegativeGnuplotFormula_ = &PosteriorErrorProbabilityModel::getGumbelGnuplotFormula;
+      getPositiveGnuplotFormula_ = &PosteriorErrorProbabilityModel::getGaussGnuplotFormula;
+
+      Size x_score_start = std::min(x_scores.size() - 1, (Size) ceil(x_scores.size() * 0.7)); // if only one score is present, ceil(...) will yield 1, which is an invalid index
+      correctly_assigned_fit_param_.x0 = Math::mean(x_scores.begin() + x_score_start, x_scores.end()) + x_scores[x_score_start]; //(gauss_scores.begin()->getX() + (gauss_scores.end()-1)->getX())/2;
+      correctly_assigned_fit_param_.sigma = incorrectly_assigned_fit_gumbel_param_.b;
+      correctly_assigned_fit_param_.A = 1.0 / sqrt(2.0 * Constants::PI * pow(correctly_assigned_fit_param_.sigma, 2.0));
+
+      //-------------------------------------------------------------
+      // create files for output
+      //-------------------------------------------------------------
+      bool output_plots  = (param_.getValue("out_plot").toString().trim().length() > 0);
+      TextFile file;
+      if (output_plots)
+      {
+        // create output directory (if not already present)
+        QDir dir(param_.getValue("out_plot").toString().toQString());
+        if (!dir.cdUp())
+        {
+          OPENMS_LOG_ERROR << "Could not navigate to output directory for plots from '" << String(dir.dirName()) << "'." << std::endl;
+          return false;
+        }
+        if (!dir.exists() && !dir.mkpath("."))
+        {
+          OPENMS_LOG_ERROR << "Could not create output directory for plots '" << String(dir.dirName()) << "'." << std::endl;
+          return false;
+        }
+        //
+        file = initPlots(x_scores);
+      }
+
+      //-------------------------------------------------------------
+      // Estimate Parameters - EM algorithm
+      //-------------------------------------------------------------
+      bool stop_em_init = false;
+      Int max_itns = param_.getValue("max_nr_iterations");
+      int delta = param_.getValue("neg_log_delta");
+      int itns = 0;
+
+      vector<double> incorrect_log_density, correct_log_density;
+      fillLogDensitiesGumbel(x_scores, incorrect_log_density, correct_log_density);
+      vector<double> bins;
+      vector<double> incorrect_posteriors;
+      double maxlike = computeLLAndIncorrectPosteriorsFromLogDensities(incorrect_log_density, correct_log_density, incorrect_posteriors);
+      double sumIncorrectPosteriors = Math::sum(incorrect_posteriors.begin(),incorrect_posteriors.end());
+      double sumCorrectPosteriors = x_scores.size() - sumIncorrectPosteriors;
+
+      OpenMS::Math::GumbelMaxLikelihoodFitter gmlf{incorrectly_assigned_fit_gumbel_param_};
+
+      do
+      {
+        //-------------------------------------------------------------
+        // E-STEP (gauss)
+        double newGaussMean = 0.0;
+        auto the_x = x_scores.cbegin();
+
+        for (auto incorrect = incorrect_posteriors.cbegin(); incorrect != incorrect_posteriors.cend(); ++incorrect, ++the_x)
+        {
+          newGaussMean += (1.-*incorrect) * *the_x;
+        }
+        newGaussMean /= sumCorrectPosteriors;
+
+        double newGaussSigma = 0.0;
+        the_x = x_scores.cbegin();
+
+        for (auto incorrect = incorrect_posteriors.cbegin(); incorrect != incorrect_posteriors.cend(); ++incorrect, ++the_x)
+        {
+          newGaussSigma += (1. - *incorrect) * pow((*the_x) - newGaussMean, 2);
+        }
+        newGaussSigma = sqrt(newGaussSigma/sumCorrectPosteriors);
+
+        GumbelMaxLikelihoodFitter::GumbelDistributionFitResult newGumbelParams = gmlf.fitWeighted(x_scores, incorrect_posteriors);
+
+        if (newGumbelParams.b <= 0 || isnan(newGumbelParams.b))
+        {
+          OPENMS_LOG_WARN << "Warning: encountered impossible standard deviations. Aborting fit." << std::endl;
+          break;
+        }
+
+        // update parameters
+        correctly_assigned_fit_param_.x0 = newGaussMean;
+        correctly_assigned_fit_param_.sigma = newGaussSigma;
+        correctly_assigned_fit_param_.A = 1 / sqrt(2 * Constants::PI * pow(newGaussSigma, 2));
+
+        incorrectly_assigned_fit_gumbel_param_ = newGumbelParams;
+
+
+        // compute new prior probabilities negative peptides
+        fillLogDensitiesGumbel(x_scores, incorrect_log_density, correct_log_density);
+        double new_maxlike = computeLLAndIncorrectPosteriorsFromLogDensities(incorrect_log_density, correct_log_density, incorrect_posteriors);
+        sumIncorrectPosteriors = Math::sum(incorrect_posteriors.begin(),incorrect_posteriors.end());
+        sumCorrectPosteriors = x_scores.size() - sumIncorrectPosteriors;
+        negative_prior_ = sumIncorrectPosteriors / x_scores.size();
+
+        if (boost::math::isnan(new_maxlike - maxlike)
+            || new_maxlike < maxlike)
+        {
+          return false;
+        }
+
+        // check termination criterium
+        if ((new_maxlike - maxlike) < pow(10.0, -delta) || itns >= max_itns)
+        {
+          if (itns >= max_itns)
+          {
+            OPENMS_LOG_WARN << "Number of iterations exceeded. Convergence criterion not met. Last likelihood increase: " << (new_maxlike - maxlike) << endl;
+            OPENMS_LOG_WARN << "Algorithm returns probabilities for suboptimal fit. You might want to try raising the max. number of iterations and have a look at the distribution." << endl;
+          }
+          stop_em_init = true;
+        }
+
+        if (output_plots)
+        {
+          String formula1, formula2, formula3;
+          formula1 = ((this)->*(getNegativeGnuplotFormula_))(incorrectly_assigned_fit_param_) + "* " + String(negative_prior_); //String(incorrectly_assigned_fit_param_.A) +" * exp(-(x - " + String(incorrectly_assigned_fit_param_.x0) + ") ** 2 / 2 / (" + String(incorrectly_assigned_fit_param_.sigma) + ") ** 2)"+ "*" + String(negative_prior_);
+          formula2 = ((this)->*(getPositiveGnuplotFormula_))(correctly_assigned_fit_param_) + "* (1 - " + String(negative_prior_) + ")"; //String(correctly_assigned_fit_param_.A) +" * exp(-(x - " + String(correctly_assigned_fit_param_.x0) + ") ** 2 / 2 / (" + String(correctly_assigned_fit_param_.sigma) + ") ** 2)"+ "* (1 - " + String(negative_prior_) + ")";
+          formula3 = getBothGnuplotFormula(incorrectly_assigned_fit_param_, correctly_assigned_fit_param_);
+          // important: use single quotes for paths, since otherwise backslashes will not be accepted on Windows!
+          file.addLine("plot '" + (String)param_.getValue("out_plot") + "_scores.txt' with boxes, " + formula1 + " , " + formula2 + " , " + formula3);
+        }
+        //update maximum likelihood
+        maxlike = new_maxlike;
+        ++itns;
+      } while (!stop_em_init);
+
+      //-------------------------------------------------------------
+      // Finished fitting
+      //-------------------------------------------------------------
+      max_incorrectly_ = getGumbel_(incorrectly_assigned_fit_param_.x0, incorrectly_assigned_fit_param_);
+      max_correctly_ = correctly_assigned_fit_param_.eval(correctly_assigned_fit_param_.x0);
+
+      if (output_plots)
+      {
+        String formula1 = ((this)->*(getNegativeGnuplotFormula_))(incorrectly_assigned_fit_param_) + "*" + String(negative_prior_); //String(incorrectly_assigned_fit_param_.A) +" * exp(-(x - " + String(incorrectly_assigned_fit_param_.x0) + ") ** 2 / 2 / (" + String(incorrectly_assigned_fit_param_.sigma) + ") ** 2)"+ "*" + String(negative_prior_);
+        String formula2 = ((this)->*(getPositiveGnuplotFormula_))(correctly_assigned_fit_param_) + "* (1 - " + String(negative_prior_) + ")"; // String(correctly_assigned_fit_param_.A) +" * exp(-(x - " + String(correctly_assigned_fit_param_.x0) + ") ** 2 / 2 / (" + String(correctly_assigned_fit_param_.sigma) + ") ** 2)"+ "* (1 - " + String(negative_prior_) + ")";
+        String formula3 = getBothGnuplotFormula(incorrectly_assigned_fit_param_, correctly_assigned_fit_param_);
+        // important: use single quotes for paths, since otherwise backslashes will not be accepted on Windows!
+        file.addLine("plot '" + (String)param_.getValue("out_plot") + "_scores.txt' with boxes, " + formula1 + " , " + formula2 + " , " + formula3);
+        file.store((String)param_.getValue("out_plot"));
+        tryGnuplot((String)param_.getValue("out_plot"));
+      }
+      return true;
+    }
 
     bool PosteriorErrorProbabilityModel::fit(std::vector<double>& search_engine_scores)
     {
@@ -280,6 +446,24 @@ namespace OpenMS
       }
     }
 
+    void PosteriorErrorProbabilityModel::fillLogDensitiesGumbel(const vector<double>& x_scores, vector<double>& incorrect_density, vector<double>& correct_density)
+    {
+      if (incorrect_density.size() != x_scores.size())
+      {
+        incorrect_density.resize(x_scores.size());
+        correct_density.resize(x_scores.size());
+      }
+      auto incorrect(incorrect_density.begin());
+      auto correct(correct_density.begin());
+      for (double const & score : x_scores)
+      {
+        *incorrect = incorrectly_assigned_fit_gumbel_param_.log_eval_no_normalize(score);
+        *correct = correctly_assigned_fit_param_.log_eval_no_normalize(score);
+        ++incorrect;
+        ++correct;
+      }
+    }
+
     void PosteriorErrorProbabilityModel::fillLogDensities(const vector<double>& x_scores, vector<double>& incorrect_density, vector<double>& correct_density)
     {
       if (incorrect_density.size() != x_scores.size())
@@ -364,14 +548,12 @@ namespace OpenMS
     {
       double pos_sigma(0);
       double neg_sigma(0);
-      double sum_incorrect(0);
       auto the_x = x_scores.cbegin();
 
       for (auto incorrect = incorrect_posteriors.cbegin(); incorrect < incorrect_posteriors.end(); ++incorrect, ++the_x)
       {
         pos_sigma += (1. - *incorrect) * pow((*the_x) - pos_neg_mean.first, 2);
         neg_sigma += (*incorrect) * pow((*the_x) - pos_neg_mean.second, 2);
-        sum_incorrect += (*incorrect);
       }
       return {pos_sigma, neg_sigma};
     }

@@ -32,6 +32,8 @@
 // $Authors: Timo Sachsenberg, Lukas Heumos $
 // --------------------------------------------------------------------------
 
+#include <include/OpenMS/ANALYSIS/ID/ConsensusMapMergerAlgorithm.h>
+#include <include/OpenMS/FILTERING/ID/IDFilter.h>
 #include "OpenMS/FORMAT/MSstatsFile.h"
 
 using namespace std;
@@ -197,7 +199,8 @@ void OpenMS::MSstatsFile::storeLFQ(const OpenMS::String &filename, ConsensusMap 
   TextFile csv_out;
   csv_out.addLine(
     String(rt_summarization_manual ? "RetentionTime,": "") +
-    "ProteinName,PeptideSequence,PrecursorCharge,FragmentIon,ProductCharge,IsotopeLabelType," + "Condition,BioReplicate,Run," +
+    "ProteinName,PeptideSequence,PrecursorCharge,FragmentIon,"
+    "ProductCharge,IsotopeLabelType,Condition,BioReplicate,Run," +
     String(has_fraction ? "Fraction,": "") + "Intensity");
 
   // Regex definition for fragment ions
@@ -225,12 +228,27 @@ void OpenMS::MSstatsFile::storeLFQ(const OpenMS::String &filename, ConsensusMap 
   }
   const String delim(",");
 
-  // check if we have one single protein identification object (containing the infered proteins and groups)
-  if (consensus_map.getProteinIdentifications().size() != 1)
+  if (consensus_map.getProteinIdentifications().empty())
   {
     throw Exception::IllegalArgument(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION,
-	  "Exactly one protein run expected containing the infered protein groups. Found: "
-	  + String(consensus_map.getProteinIdentifications().size()) + " protein runs");
+	  "No protein information found in the ConsensusXML.");
+  }
+
+  // warn if we have more than one protein ID run
+  //TODO actually allow having more than one inference run e.g. for different conditions
+  if (consensus_map.getProteinIdentifications().size() > 1)
+  {
+    OPENMS_LOG_WARN << "Found " +
+    String(consensus_map.getProteinIdentifications().size()) +
+    " protein runs in consensusXML. Using first one only to parse inference data for now." << std::endl;
+  }
+
+  if (!consensus_map.getProteinIdentifications()[0].hasInferenceData())
+  {
+    OPENMS_LOG_WARN << "No inference was performed, defaulting to one-peptide-rule across all runs." << std::endl;
+    ConsensusMapMergerAlgorithm merger;
+    merger.mergeAllIDRunsEasier(consensus_map);
+    IDFilter::updateProteinReferences(consensus_map, true); //remove dangling peptides
   }
 
   // We quantify indistinguishable groups with one (corner case) or multiple proteins.
@@ -238,30 +256,23 @@ void OpenMS::MSstatsFile::storeLFQ(const OpenMS::String &filename, ConsensusMap 
   // that all proteins can be independently quantified (each forming an indistinguishable group).
   using IndProtGrp = ProteinIdentification::ProteinGroup;
   using IndProtGrps = std::vector<IndProtGrp>;
+  consensus_map.getProteinIdentifications()[0].fillIndistinguishableGroupsWithSingletons();
   IndProtGrps& ind_prots = consensus_map.getProteinIdentifications()[0].getIndistinguishableProteins();
-  if (ind_prots.empty())
-  {
-    for (const OpenMS::ProteinHit& prot_hit : consensus_map.getProteinIdentifications()[0].getHits())
-    {
-      ProteinIdentification::ProteinGroup pg;
-      pg.accessions.push_back(prot_hit.getAccession());
-      ind_prots.push_back(pg);
-    }
-  }
 
   // Map protein accession to its indistinguishable group
   std::map< String, const IndProtGrp* > accession_to_group;
   for (const IndProtGrp& pgrp : ind_prots)
   {
-    std::cout << "Group size: " << pgrp.accessions.size() << endl;
-    for (const String & a : pgrp.accessions)
+    //std::cout << "Group size: " << pgrp.accessions.size() << endl;
+    for (const String& a : pgrp.accessions)
     {
-      std::cout << a << endl;
+      //std::cout << a << endl;
       accession_to_group[a] = &(pgrp);
     }
   }
 
   // Map peptides to protein accessions
+  //TODO one map to save all the Strings
   std::map< String, std::set<String > > peptideseq_to_accessions;
   std::map< String, bool > peptideseq_quantifyable;
   for (Size i = 0; i < features.size(); ++i)
@@ -271,23 +282,26 @@ void OpenMS::MSstatsFile::storeLFQ(const OpenMS::String &filename, ConsensusMap 
     {
       for (const OpenMS::PeptideHit & pep_hit : pep_id.getHits())
       {
-        const std::vector< PeptideEvidence > & original_peptide_evidences = pep_hit.getPeptideEvidences();
-        const std::vector< PeptideEvidence> & peptide_evidences = (original_peptide_evidences.empty()) ? placeholder_peptide_evidences : original_peptide_evidences;
-        const String & sequence = pep_hit.getSequence().toString(); // to modified string
+        const std::vector<PeptideEvidence> & original_peptide_evidences = pep_hit.getPeptideEvidences();
+        const std::vector<PeptideEvidence> & peptide_evidences = (original_peptide_evidences.empty()) ? placeholder_peptide_evidences : original_peptide_evidences;
+        //TODO Really double check with Meena Choi (MSStats author) or make it an option! I can't find any info
+        // on what is correct. For TMT we include them (since it is necessary)
+        const String & sequence = pep_hit.getSequence().toUnmodifiedString(); // to modified string
 
         // check if all referenced protein accessions are part of the same indistinguishable group
-        // if so, we mark the sequence as quantifyable
+        // if so, we mark the sequence as quantifiable
         std::set<String> accs = pep_hit.extractProteinAccessionsSet();
         std::set<const IndProtGrp*> maps_to_indgrps;
         for (const String& a : accs)
         {
+          //TODO inefficient double lookup especially in a slow ordered map
           if (accession_to_group.find(a) != accession_to_group.end())
           {
             maps_to_indgrps.insert(accession_to_group[a]);
           }
           else
           {
-            OPENMS_LOG_WARN << "Accession " << a << " does not match to an infered group." << std::endl;
+            OPENMS_LOG_WARN << "Accession " << a << " does not match to an inferred group." << std::endl;
           }
         }
         peptideseq_quantifyable[sequence] = (maps_to_indgrps.size() == 1);
@@ -295,7 +309,7 @@ void OpenMS::MSstatsFile::storeLFQ(const OpenMS::String &filename, ConsensusMap 
         for (const OpenMS::PeptideEvidence &pep_ev : peptide_evidences)
         {
           const String & accession = pep_ev.getProteinAccession();
-  	  peptideseq_to_accessions[sequence].insert(accession); // TODO: check: will add NA for peptide evidences without protein reference
+  	      peptideseq_to_accessions[sequence].insert(accession); // TODO: check: will add NA for peptide evidences without protein reference
         }
       }
     }
@@ -326,7 +340,9 @@ void OpenMS::MSstatsFile::storeLFQ(const OpenMS::String &filename, ConsensusMap 
         // Variables of the peptide hit
         // MSstats User manual 3.7.3: Unknown precursor charge should be set to 0
         const Int precursor_charge = (std::max)(pep_hit.getCharge(), 0);
-        const String & sequence = pep_hit.getSequence().toString(); // to modified string
+        //TODO Really double check with Meena Choi (MSStats author) or make it an option! I can't find any info
+        // on what is correct. For TMT we include them (since it is necessary) (see occurrence above as well when map is built!)
+        const String & sequence = pep_hit.getSequence().toUnmodifiedString(); // to modified string
 
         // Have to combine all fragment annotations with all peptide evidences
         for (const OpenMS::PeptideHit::PeakAnnotation & frag_ann : fragment_annotations)

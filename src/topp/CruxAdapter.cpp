@@ -429,7 +429,7 @@ protected:
     // fill search parameters
     ProteinIdentification::SearchParameters sp;
     sp.db = getStringOption_("database");
-    sp.charges = getIntList_("charge");
+    //sp.charges = getIntList_("charge"); //dont know. Seems like tide doesnt support ranges and usually searches all?
     sp.fixed_modifications = getStringList_("fixed_modifications");
     sp.variable_modifications = getStringList_("variable_modifications");
     sp.missed_cleavages = getIntOption_("allowed_missed_cleavages");
@@ -437,7 +437,7 @@ protected:
     sp.fragment_mass_tolerance_ppm = "Da";
     sp.precursor_mass_tolerance = getDoubleOption_("precursor_mass_tolerance");
     sp.precursor_mass_tolerance_ppm = getStringOption_("precursor_mass_units") == "ppm";
-    sp.digestion_enzyme = static_cast<DigestionEnzymeProtein>(ProteaseDB::getInstance()->getEnzyme(getStringOption_("enzyme")));
+    sp.digestion_enzyme = *static_cast<const DigestionEnzymeProtein*>(ProteaseDB::getInstance()->getEnzyme(getStringOption_("enzyme")));
 
     std::cout << " will load file now " << std::endl;
     if (run_percolator)

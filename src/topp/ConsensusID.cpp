@@ -229,7 +229,7 @@ protected:
     // or maybe put it in a DataProcessingStep
     if (algorithm_ == "best" || algorithm_ == "worst" || algorithm_ == "average")
     {
-      prot_ids[0].setSearchEngine("ConsensusIDBaseSearch", engine + String(":") + version);
+      prot_ids[0].setMetaValue("ConsensusIDBaseSearch", engine + String(":") + version);
     }
 
     // make file name entries unique

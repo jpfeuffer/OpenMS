@@ -268,7 +268,7 @@ set_tests_properties("TOPP_FeatureFinderCentroided_1_out1" PROPERTIES DEPENDS "T
 # FeatureFinderIdentification test
 ## internal IDs only:
 add_test("TOPP_FeatureFinderIdentification_1" ${TOPP_BIN_PATH}/FeatureFinderIdentification -test -in ${DATA_DIR_TOPP}/FeatureFinderIdentification_1_input.mzML -id ${DATA_DIR_TOPP}/FeatureFinderIdentification_1_input.idXML -out FeatureFinderIdentification_1.tmp -extract:mz_window 0.1 -detect:peak_width 60 -model:type none)
-add_test("TOPP_FeatureFinderIdentification_1_out1" ${DIFF} -whitelist "spectra_data" -in1 FeatureFinderIdentification_1.tmp -in2 ${DATA_DIR_TOPP}/FeatureFinderIdentification_1_output.featureXML)
+add_test("TOPP_FeatureFinderIdentification_1_out1" ${DIFF} -whitelist "spectra_data" "featureMap" -in1 FeatureFinderIdentification_1.tmp -in2 ${DATA_DIR_TOPP}/FeatureFinderIdentification_1_output.featureXML)
 set_tests_properties("TOPP_FeatureFinderIdentification_1_out1" PROPERTIES DEPENDS "TOPP_FeatureFinderIdentification_1")
 ## with (faked) external IDs; fix SVM parameters to avoid randomness:
 ## test currently produces different results on Windows, Mac, and Linux
@@ -279,7 +279,7 @@ set_tests_properties("TOPP_FeatureFinderIdentification_1_out1" PROPERTIES DEPEND
 
 ## with elution model fitting:
 add_test("TOPP_FeatureFinderIdentification_3" ${TOPP_BIN_PATH}/FeatureFinderIdentification -test -in ${DATA_DIR_TOPP}/FeatureFinderIdentification_1_input.mzML -id ${DATA_DIR_TOPP}/FeatureFinderIdentification_1_input.idXML -out FeatureFinderIdentification_3.tmp -extract:mz_window 0.1 -detect:peak_width 60 -model:type symmetric)
-add_test("TOPP_FeatureFinderIdentification_3_out1" ${DIFF} -whitelist "spectra_data" -in1 FeatureFinderIdentification_3.tmp -in2 ${DATA_DIR_TOPP}/FeatureFinderIdentification_3_output.featureXML)
+add_test("TOPP_FeatureFinderIdentification_3_out1" ${DIFF} -whitelist "spectra_data" "featureMap" -in1 FeatureFinderIdentification_3.tmp -in2 ${DATA_DIR_TOPP}/FeatureFinderIdentification_3_output.featureXML)
 set_tests_properties("TOPP_FeatureFinderIdentification_3_out1" PROPERTIES DEPENDS "TOPP_FeatureFinderIdentification_3")
 
 #------------------------------------------------------------------------------
@@ -1703,7 +1703,7 @@ set_tests_properties("TOPP_LowMemPeakPickerHiResRandomAccess_1_out1" PROPERTIES 
 
 #------------------------------------------------------------------------------
 # Basic ProteinInference
-add_test("TOPP_ProteinInference_1" ${TOPP_BIN_PATH}/ProteinInference -test -in ${DATA_DIR_TOPP}/ProteinInference_1_input.mzML -out ProteinInference_1_output.tmp -Algorithm:use_shared_peptides false)
+add_test("TOPP_ProteinInference_1" ${TOPP_BIN_PATH}/ProteinInference -test -in ${DATA_DIR_TOPP}/ProteinInference_1_input.idXML -out ProteinInference_1_output.tmp -Algorithm:use_shared_peptides false -merge_runs all -Merging:annotate_origin false)
 add_test("TOPP_ProteinInference_1_out1" ${DIFF} -in1 ProteinInference_1_output.tmp -in2 ${DATA_DIR_TOPP}/ProteinInference_1_output.idXML)
 set_tests_properties("TOPP_ProteinInference_1_out1" PROPERTIES DEPENDS "TOPP_ProteinInference_1")
 
@@ -2100,12 +2100,6 @@ set_tests_properties("TOPP_CompNovoCID_1_out1" PROPERTIES DEPENDS "TOPP_CompNovo
 add_test("TOPP_PrecursorMassCorrector_1" ${TOPP_BIN_PATH}/PrecursorMassCorrector -test -in ${DATA_DIR_TOPP}/PrecursorMassCorrector_1_input.mzML -ini ${DATA_DIR_TOPP}/PrecursorMassCorrector_1.ini -out PrecursorMassCorrector_1_output.tmp)
 add_test("TOPP_PrecursorMassCorrector_1_out1" ${DIFF} -whitelist ${INDEX_WHITELIST} "location=" -in1 PrecursorMassCorrector_1_output.tmp -in2 ${DATA_DIR_TOPP}/PrecursorMassCorrector_1_output.mzML )
 set_tests_properties("TOPP_PrecursorMassCorrector_1_out1" PROPERTIES DEPENDS "TOPP_PrecursorMassCorrector_1")
-
-#------------------------------------------------------------------------------
-# ProteinInference tests
-add_test("TOPP_ProteinInference_1" ${TOPP_BIN_PATH}/ProteinInference -test -in ${DATA_DIR_TOPP}/ProteinInference.idXML -out ProteinInference_output.tmp)
-add_test("TOPP_ProteinInference_1_out1" ${DIFF} -in1 ProteinInference_output.tmp -in2 ${DATA_DIR_TOPP}/ProteinInference_proteins.idXML )
-set_tests_properties("TOPP_ProteinInference_1_out1" PROPERTIES DEPENDS "TOPP_ProteinInference_1")
 
 #------------------------------------------------------------------------------
 # FalseDiscoveryRate_tests (1: default param, 2: with runs separated, 3: with charge variants individual, 4: with charge variants and no charge 1 decoys -> q_value 0)

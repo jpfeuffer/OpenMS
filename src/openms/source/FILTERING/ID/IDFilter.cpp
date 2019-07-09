@@ -271,6 +271,53 @@ namespace OpenMS
     }
   }
 
+  void IDFilter::updateProteinReferences(
+      ConsensusMap& cmap,
+      bool remove_peptides_without_reference)
+  {
+    vector<ProteinIdentification>& proteins = cmap.getProteinIdentifications();
+    // collect valid protein accessions for each ID run:
+    map<String, unordered_set<String> > run_to_accessions;
+    for (vector<ProteinIdentification>::const_iterator prot_it =
+        proteins.begin(); prot_it != proteins.end(); ++prot_it)
+    {
+      const String& run_id = prot_it->getIdentifier();
+      for (vector<ProteinHit>::const_iterator hit_it =
+          prot_it->getHits().begin(); hit_it != prot_it->getHits().end();
+           ++hit_it)
+      {
+        run_to_accessions[run_id].insert(hit_it->getAccession());
+      }
+    }
+
+    function<void(PeptideIdentification&)> f = [&run_to_accessions,&remove_peptides_without_reference]
+        (PeptideIdentification& pep_it) -> void
+    {
+      const String& run_id = pep_it.getIdentifier();
+      const unordered_set<String>& accessions = run_to_accessions[run_id];
+      struct HasMatchingAccessionUnordered<PeptideEvidence> acc_filter(accessions);
+      // check protein accessions of each peptide hit
+      for (vector<PeptideHit>::iterator hit_it = pep_it.getHits().begin();
+           hit_it != pep_it.getHits().end(); ++hit_it)
+      {
+        // no non-const "PeptideHit::getPeptideEvidences" implemented, so we
+        // can't use "keepMatchingItems":
+        vector<PeptideEvidence> evidences;
+        remove_copy_if(hit_it->getPeptideEvidences().begin(),
+                       hit_it->getPeptideEvidences().end(),
+                       back_inserter(evidences),
+                       not1(acc_filter));
+        hit_it->setPeptideEvidences(evidences);
+      }
+
+      if (remove_peptides_without_reference)
+      {
+        removeMatchingItems(pep_it.getHits(), HasNoEvidence());
+      }
+    };
+
+    cmap.applyFunctionOnPeptideIDs(f);
+  }
 
   void IDFilter::updateProteinReferences(
     vector<PeptideIdentification>& peptides,
@@ -278,7 +325,7 @@ namespace OpenMS
     bool remove_peptides_without_reference)
   {
     // collect valid protein accessions for each ID run:
-    map<String, set<String> > run_to_accessions;
+    map<String, unordered_set<String> > run_to_accessions;
     for (vector<ProteinIdentification>::const_iterator prot_it =
            proteins.begin(); prot_it != proteins.end(); ++prot_it)
     {
@@ -295,8 +342,8 @@ namespace OpenMS
          pep_it != peptides.end(); ++pep_it)
     {
       const String& run_id = pep_it->getIdentifier();
-      const set<String>& accessions = run_to_accessions[run_id];
-      struct HasMatchingAccession<PeptideEvidence> acc_filter(accessions);
+      const unordered_set<String>& accessions = run_to_accessions[run_id];
+      struct HasMatchingAccessionUnordered<PeptideEvidence> acc_filter(accessions);
       // check protein accessions of each peptide hit
       for (vector<PeptideHit>::iterator hit_it = pep_it->getHits().begin();
            hit_it != pep_it->getHits().end(); ++hit_it)

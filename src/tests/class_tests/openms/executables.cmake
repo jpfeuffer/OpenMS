@@ -515,7 +515,6 @@ set(analysis_executables_list
   PoseClusteringShiftSuperimposer_test
   PrecursorIonSelectionPreprocessing_test
   PrecursorIonSelection_test
-  ProteinInference_test
   PrecursorPurity_test
   ProtonDistributionModel_test
   ProteinResolver_test

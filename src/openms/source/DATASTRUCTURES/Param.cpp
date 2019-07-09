@@ -1131,7 +1131,7 @@ namespace OpenMS
 
   bool Param::update(const Param& p_outdated, const bool add_unknown)
   {
-    return update(p_outdated, add_unknown, OPENMS_LOG_WARN);
+    return update(p_outdated, add_unknown, OpenMS_Log_warn);
   }
 
   bool Param::update(const Param& p_outdated, const bool add_unknown, Logger::LogStream& stream)
@@ -1158,6 +1158,7 @@ namespace OpenMS
         {
           if (this->getValue(it.getName()) != it->value)
           {
+OPENMS_THREAD_CRITICAL(oms_log)
             stream << "Warning: for ':version' entry, augmented and Default Ini-File differ in value. Default value will not be altered!\n";
           }
           continue;
@@ -1168,6 +1169,7 @@ namespace OpenMS
         {
           if (this->getValue(it.getName()) != it->value)
           {
+OPENMS_THREAD_CRITICAL(oms_log)
             stream << "Warning: for ':type' entry, augmented and Default Ini-File differ in value. Default value will not be altered!\n";
           }
           continue;
@@ -1192,6 +1194,7 @@ namespace OpenMS
           // make sure the same leaf name does not exist at any other position
           if (this->findNext(l1_entry.name, it_match) == this->end())
           {
+OPENMS_THREAD_CRITICAL(oms_log)
             stream << "Found '" << it.getName() << "' as '" << it_match.getName() << "' in new param." << std::endl;
             new_entry = this->getEntry(it_match.getName());
             target_name = it_match.getName();
@@ -1202,11 +1205,13 @@ namespace OpenMS
         {
           if (fail_on_unknown_parameters)
           {
+OPENMS_THREAD_CRITICAL(oms_log)
             stream << "Unknown (or deprecated) Parameter '" << it.getName() << "' given in outdated parameter file!" << std::endl;
             is_update_success = false;
           }
           else if (add_unknown)
           {
+OPENMS_THREAD_CRITICAL(oms_log)
             stream << "Unknown (or deprecated) Parameter '" << it.getName() << "' given in outdated parameter file! Adding to current set." << std::endl;
             Param::ParamEntry local_entry = p_outdated.getEntry(it.getName());
             String prefix = "";
@@ -1218,6 +1223,7 @@ namespace OpenMS
           }
           else
           {
+OPENMS_THREAD_CRITICAL(oms_log)
             stream << "Unknown (or deprecated) Parameter '" << it.getName() << "' given in outdated parameter file! Ignoring parameter. " << std::endl;
           }
           continue;
@@ -1236,19 +1242,26 @@ namespace OpenMS
           if (new_entry.isValid(validation_result))
           {
             // overwrite default value
-            if (verbose) stream << "Default-Parameter '" << target_name << "' overridden: '" << default_value << "' --> '" << it->value << "'!" << std::endl;
+            if (verbose) 
+            {
+OPENMS_THREAD_CRITICAL(oms_log)
+                stream << "Default-Parameter '" << target_name << "' overridden: '" << default_value << "' --> '" << it->value << "'!" << std::endl;
+            }
             this->setValue(target_name, it->value, new_entry.description, this->getTags(target_name));
           }
           else
           {
+OPENMS_THREAD_CRITICAL(oms_log)
             stream << validation_result;
             if (fail_on_invalid_values)
             {
+OPENMS_THREAD_CRITICAL(oms_log)
               stream << " Updating failed!" << std::endl;
               is_update_success = false;
             }
             else
             {
+OPENMS_THREAD_CRITICAL(oms_log)
               stream << " Ignoring invalid value (using new default '" << default_value << "')!" << std::endl;
               new_entry.value = default_value;
             }
@@ -1261,14 +1274,17 @@ namespace OpenMS
       }
       else
       {
+OPENMS_THREAD_CRITICAL(oms_log)
         stream << "Parameter '" << it.getName() << "' has changed value type!\n";
         if (fail_on_invalid_values)
         {
+OPENMS_THREAD_CRITICAL(oms_log)
           stream << " Updating failed!" << std::endl;
           is_update_success = false;
         } 
         else
         {
+OPENMS_THREAD_CRITICAL(oms_log)
           stream << " Ignoring invalid value (using new default)!" << std::endl;
         }
       }

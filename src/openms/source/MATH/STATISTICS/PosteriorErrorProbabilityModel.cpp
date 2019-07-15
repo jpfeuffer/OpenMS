@@ -790,6 +790,8 @@ namespace OpenMS
       //const double smallest_e_value_ = numeric_limits<double>::denorm_min();
       const double smallest_e_value_ = numeric_limits<double>::min();
 
+      //TODO we don't care about score types here? What if the data was processed with
+      // IDPEP or Percolator already?
       if (engine == "OMSSA")
       {
         return (-1) * log10(max(hit.getScore(), smallest_e_value_));

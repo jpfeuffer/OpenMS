@@ -269,7 +269,7 @@ protected:
         vector<ProteinIdentification> prots;
         vector<PeptideIdentification> peps;
         idXMLf.load(file,prots,peps);
-        merger.insertRun(prots,peps);
+        merger.insertRuns(prots, peps);
       }
       merger.returnResultsAndClear(proteins[0], peptides);
     }
@@ -327,10 +327,12 @@ protected:
 
     if (add_to.empty()) // copy proteins from map into vector for writing
     {
+      // append peptides in same vector
       for (vector<PeptideIdentification> & peps : peptides_by_file)
       {
         peptides.insert(peptides.end(), peps.begin(), peps.end());
       }
+      // only append the runs (no merging of proteins)
       for (auto map_it = proteins_by_id.begin(); map_it != proteins_by_id.end(); ++map_it)
       {
         proteins.push_back(map_it->second);

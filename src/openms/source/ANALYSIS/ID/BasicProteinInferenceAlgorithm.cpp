@@ -222,7 +222,7 @@ namespace OpenMS
           __LINE__,
           OPENMS_PRETTY_FUNCTION,
           "ProteinInference needs Posterior (Error) Probabilities in the Peptide Hits. Use Percolator with PEP score"
-          "or run IDPosteriorErrorProbability first.");
+          " or run IDPosteriorErrorProbability first.");
     }
 
     for (auto &pep : pep_ids)

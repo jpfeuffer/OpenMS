@@ -56,10 +56,10 @@ namespace OpenMS
 
     /// Insert (=move and clear) a run with its peptide IDs into the internal merged data structures,
     /// based on the initial mapping from fileorigins to new run
-    void insertRun(std::vector<ProteinIdentification>&& prots,
-        std::vector<PeptideIdentification>&& peps);
-    void insertRun(const std::vector<ProteinIdentification>& prots,
-                   const std::vector<PeptideIdentification>& peps);
+    void insertRuns(std::vector<ProteinIdentification>&& prots,
+                    std::vector<PeptideIdentification>&& peps);
+    void insertRuns(const std::vector<ProteinIdentification>& prots,
+                    const std::vector<PeptideIdentification>& peps);
     //TODO add methods to just insert prots or just peps. Especially makes sense if you do re-indexing anyway,
     // then you do not need the proteins. But then we need origin information. Either externally in form of a
     // String or StringList (like the one from ProteinID.getPrimaryMSRunPath). Or by having the file annotated
@@ -96,10 +96,10 @@ namespace OpenMS
         const String& experiment_type) const;
 
 
-    void movePepIDsAndRefProteinsToResult_(
+    /*void movePepIDsAndRefProteinsToResult_(
         std::vector<PeptideIdentification>&& pepIDs,
         std::vector<ProteinIdentification>&& oldProtRuns
-    );
+    );*/
 
     void insertProteinIDs_(
         std::vector<ProteinIdentification>&& oldProtRuns
@@ -119,8 +119,7 @@ namespace OpenMS
 
     ProteinIdentification protResult;
     std::vector<PeptideIdentification> pepResult;
-    std::unordered_set<std::string> proteinsCollected;
-    /*
+
     static size_t accessionHash(const ProteinHit& p){
       return std::hash<String>()(p.getAccession());
     }
@@ -130,7 +129,7 @@ namespace OpenMS
     using hash_type = std::size_t (*)(const ProteinHit&);
     using equal_type = bool (*)(const ProteinHit&, const ProteinHit&);
     std::unordered_set<ProteinHit, hash_type, equal_type> proteinsCollectedHits;
-    */
+
     bool filled = false;
     std::map<String, Size> fileOriginToIdx;
     String id;

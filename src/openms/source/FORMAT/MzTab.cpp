@@ -1745,7 +1745,7 @@ namespace OpenMS
       row.modifications = extractModificationListFromAASequence(aas, fixed_mods);
 
       const set<String>& accessions = best_ph.extractProteinAccessionsSet();
-      const vector<PeptideEvidence> peptide_evidences = best_ph.getPeptideEvidences();
+      const vector<PeptideEvidence>& peptide_evidences = best_ph.getPeptideEvidences();
 
       row.unique = accessions.size() == 1 ? MzTabBoolean(true) : MzTabBoolean(false);
       // select accession of first peptide_evidence as representative ("leading") accession
@@ -1796,7 +1796,7 @@ namespace OpenMS
     MzTabString db, db_version;
 
     // search engine and version -> MS runs index
-    map<pair<String, String>, set<Size>> search_engine_to_runs;
+    map<tuple<String, String, String>, set<Size>> search_engine_to_runs;
     map<Size, vector<pair<String, String>>> run_to_search_engines;
 
     // old/secondary/overwritten search engines and versions.
@@ -1829,15 +1829,27 @@ namespace OpenMS
       }
 
       // TODO: use a different identifier to determine if it is inference data (check other places!)
-      bool skip_first_run = prot_ids[0].hasInferenceData() && first_run_inference_only;
+      bool has_inference_data = prot_ids[0].hasInferenceData();
+      bool skip_first_run = has_inference_data && first_run_inference_only;
       if (skip_first_run)
       {
-        OPENMS_LOG_DEBUG << "MzTab: Inference data provided. Considering first run only for inference data." << std::endl;
+        OPENMS_LOG_INFO << "MzTab: Inference data provided. Considering first run only for inference data." << std::endl;
       }
 
       MzTabParameter protein_score_type;
-      protein_score_type.fromCellString("[,," + prot_ids[0].getInferenceEngine() + "," + prot_ids[0].getInferenceEngineVersion() + "]"); // TODO: check if we need one for every run (should not be redundant!)
-      meta_data.protein_search_engine_score[1] = protein_score_type; // TODO add meta value to ProteinIdentification
+      if (has_inference_data)
+      {
+        protein_score_type.fromCellString("[,," + prot_ids[0].getInferenceEngine() + " " + prot_ids[0].getScoreType() + "," + prot_ids[0].getInferenceEngineVersion() + "]"); // TODO: check if we need one for every run (should not be redundant!)
+      }
+      else
+      {
+        // if there was no inference all proteins just come from PeptideIndexer which kind of does a one-peptide rule
+        // TODO actually: where are scores coming from in this case. Better to just not write any proteins IMHO
+        protein_score_type.fromCellString("[,,one-peptide-rule " + prot_ids[0].getScoreType() + ",]");
+      }
+      meta_data.protein_search_engine_score[1] = protein_score_type;
+      // TODO what if not only the first run has inference data?
+      //  then we need to cluster like with the peptide search engines.
 
       // maps the filenames in the runs to the MSRun index in the metadata section
       //TODO I think this is a temporary map and could be freed after usage
@@ -1847,8 +1859,15 @@ namespace OpenMS
       // collect variable and fixed modifications plus file origins from different runs
       size_t current_ms_run_index(1);
       size_t current_idrun_index(0);
+      bool first = true;
       for (auto const & pid : prot_ids)
       {
+        if (skip_first_run && first)
+        {
+          first = false;
+          current_idrun_index++;
+          continue;
+        }
         idrun_2_run_index[pid.getIdentifier()] = current_idrun_index;
         const ProteinIdentification::SearchParameters & sp = pid.getSearchParameters();
         var_mods.insert(std::end(var_mods), std::begin(sp.variable_modifications), std::end(sp.variable_modifications));
@@ -1940,7 +1959,11 @@ namespace OpenMS
         for (const auto& run : prot_ids)
         {
           // First entry might be the inference result without (single) associated ms_run. We skip it.
-          if (skip_first_run && run_index == 1) { continue; }
+          if (skip_first_run && run_index == 0)
+          {
+            run_index++;
+            continue;
+          }
 
           StringList files;
           run.getPrimaryMSRunPath(files);
@@ -1969,14 +1992,18 @@ namespace OpenMS
           // First entry might be the inference result without (single) associated ms_run. We skip it.
           if (skip_first_run && it == prot_ids.begin())
           {
+            run_index++;
             continue;
           }
 
           size_t hit_index = std::distance(prot_ids.begin(), it);
           const String &search_engine_name = prot_ids[hit_index].getSearchEngine();
           const String &search_engine_version = prot_ids[hit_index].getSearchEngineVersion();
-          search_engine_to_runs[make_pair(search_engine_name, search_engine_version)].insert(run_index);
+          const String &search_engine_score_type = prot_ids[hit_index].getScoreType();
+          search_engine_to_runs[make_tuple(search_engine_name, search_engine_version, search_engine_score_type)].insert(run_index);
           run_to_search_engines[run_index].push_back(make_pair(search_engine_name, search_engine_version));
+
+
           vector<String> mvkeys;
           const ProteinIdentification::SearchParameters& sp2 = prot_ids[hit_index].getSearchParameters();
           sp2.getKeys(mvkeys);
@@ -1987,7 +2014,7 @@ namespace OpenMS
           for (const String & mvkey : mvkeys)
           {
             // currently only supported for SEs overwritten by PercolatorAdapter
-            // we also do not support different settings but assume that they were run with the same settings
+            // we also do not support different settings across runs but assume that they were run with the same settings
             // and that these settings were taken over into the ones for PercolatorAdapter
             if (mvkey.hasPrefix("SE:"))
             {
@@ -2008,7 +2035,9 @@ namespace OpenMS
           ++run_index;
         }
       }
-      Size sw_idx(meta_data.software.size());
+
+      //TODO make software a list?? super weird to fill it like this.
+      Size sw_idx(meta_data.software.size()+1); //+1 since we always start with 1 anyway.
       Size cnt(0);
       for (auto const & se : secondary_search_engines)
       {
@@ -2034,8 +2063,8 @@ namespace OpenMS
       for (auto const & se : search_engine_to_runs) // loop over (unique) search engine names
       {
         MzTabParameter psm_score_type;
-        const pair<String, String>& name_version = se.first;
-        psm_score_type.fromCellString("[,," + name_version.first + "," + name_version.second + "]");
+        const tuple<String, String, String>& name_version_score = se.first;
+        psm_score_type.fromCellString("[,," + get<0>(name_version_score) + " " + get<2>(name_version_score) + "," + get<1>(name_version_score) + "]");
         meta_data.psm_search_engine_score[psm_search_engine_index] = psm_score_type;
         meta_data.peptide_search_engine_score[psm_search_engine_index] = psm_score_type; // same score type for peptides
         psm_search_engine_index++;
@@ -2406,7 +2435,7 @@ Not sure how to handle these:
 
     MzTabSoftwareMetaData sw;
     sw.software.fromCellString("[MS,MS:1000752,TOPP software," + VersionInfo::getVersion() + "]");
-    meta_data.software[std::max<size_t>(1u, meta_data.software.size())] = sw;
+    meta_data.software[std::max<size_t>(1u, meta_data.software.size()+1)] = sw;
 
     MzTabPSMSectionRows rows;
     int psm_id(0);
@@ -2596,7 +2625,7 @@ Not sure how to handle these:
           String unimod = res_mod.getUniModAccession();
           MzTabString unimod_accession = MzTabString(unimod.toUpper());
           vector<std::pair<Size, MzTabParameter> > pos;
-          pos.push_back(make_pair(aas.size() + 1, MzTabParameter()));
+          pos.emplace_back(aas.size() + 1, MzTabParameter());
           mod.setPositionsAndParameters(pos);
           mod.setModificationIdentifier(unimod_accession);
           mods.push_back(mod);
@@ -2978,19 +3007,13 @@ Not sure how to handle these:
 		    }
       }
 
-      vector<PeptideIdentification> curr_pep_ids = c.getPeptideIdentifications();
+      const vector<PeptideIdentification>& curr_pep_ids = c.getPeptideIdentifications();
       if (!curr_pep_ids.empty())
       {
-        if (curr_pep_ids.size() != 1)
-        {
-          throw OpenMS::Exception::IllegalArgument(
-              __FILE__
-            , __LINE__
-            , __FUNCTION__
-            , "Consensus features may contain at most one identification. Run IDConflictResolver first to remove ambiguities!");
-        }
+        checkSequenceUniqueness_(curr_pep_ids);
 
-        curr_pep_ids[0].assignRanks();
+        // Overall information for this feature in PEP section
+        // Features need to be resolved for this. First is not necessarily the best since ids were resorted by map_index.
         const PeptideHit& best_ph = curr_pep_ids[0].getHits()[0];
         const AASequence& aas = best_ph.getSequence();
         row.sequence = MzTabString(aas.toUnmodifiedString());
@@ -3005,40 +3028,7 @@ Not sure how to handle these:
         // select accession of first peptide_evidence as representative ("leading") accession
         row.accession = peptide_evidences.empty() ? MzTabString("null") : MzTabString(peptide_evidences[0].getProteinAccession());
 
-        row.best_search_engine_score[1] = MzTabDouble(best_ph.getScore());
-
-        // TODO: support run level scores - for now we assume we got the same score from every ms run
-        for (Size ms_run = 1; ms_run <= ms_runs.size(); ++ms_run)
-        {
-          row.search_engine_score_ms_run[1][ms_run] = MzTabDouble(best_ph.getScore());
-        }
-
-        if (pep_ids[0].metaValueExists("spectrum_reference"))
-        {
-          size_t spec_run_index = idrun_2_run_index[curr_pep_ids[0].getIdentifier()];
-          StringList filenames;
-          prot_ids[spec_run_index].getPrimaryMSRunPath(filenames);
-          size_t msfile_index(0);
-          if (filenames.size() <= 1) //either none or only one file for this run
-          {
-            msfile_index = map_run_fileidx_2_msfileidx[{spec_run_index, 0}];
-          }
-          else
-          {
-            if (pep_ids[0].metaValueExists("map_index"))
-            {
-              msfile_index = map_run_fileidx_2_msfileidx[{spec_run_index, curr_pep_ids[0].getMetaValue("map_index")}];
-            }
-            else
-            {
-              throw Exception::MissingInformation(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION,
-                                                   "Multiple files in a run, but no map_index in PeptideIdentification found.");
-            }
-          }
-          row.spectra_ref.setSpecRef(curr_pep_ids[0].getMetaValue("spectrum_reference").toString());
-          row.spectra_ref.setMSFile(msfile_index);
-        }
-        // fill opt_ columns
+        // fill opt_ columns based on best ID in the feature
 
         // find opt_global_modified_sequence in opt_ and set it to the OpenMS amino acid string (easier human readable than unimod accessions)
         for (Size i = 0; i != row.opt_.size(); ++i)
@@ -3077,9 +3067,60 @@ Not sure how to handle these:
             }
           }
         }
-      }
 
+        // get msrun indices for each ID and insert best search_engine_score for this run
+        // for the first run we also annotate the spectra_ref (since it is not designed to be a list)
+        // TODO choose best run instead?
+        bool first = true;
+        double best_score = best_ph.getScore();
+        for (const auto& pep : curr_pep_ids)
+        {
+          size_t spec_run_index = idrun_2_run_index[pep.getIdentifier()];
+          StringList filenames;
+          prot_ids[spec_run_index].getPrimaryMSRunPath(filenames);
+          size_t msfile_index(0);
+          size_t map_index(0);
+          if (filenames.size() <= 1) //either none or only one file for this run
+          {
+            msfile_index = map_run_fileidx_2_msfileidx[{spec_run_index, 0}];
+          }
+          else
+          {
+            if (pep.metaValueExists("map_index"))
+            {
+              map_index = pep.getMetaValue("map_index");
+              msfile_index = map_run_fileidx_2_msfileidx[{spec_run_index, map_index}];
+            }
+            else
+            {
+              throw Exception::MissingInformation(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION,
+                                                  "Multiple files in a run, but no map_index in PeptideIdentification found.");
+            }
+          }
+
+          double curr_score = pep.getHits()[0].getScore();
+          row.search_engine_score_ms_run[1].at(msfile_index) = MzTabDouble(curr_score);
+          //TODO assumes same scores & score types
+          if ((pep.isHigherScoreBetter() && curr_score > best_score)
+          || (!pep.isHigherScoreBetter() && curr_score < best_score))
+          {
+            best_score = curr_score;
+          }
+
+          if (first)
+          {
+            if (pep.metaValueExists("spectrum_reference"))
+            {
+              row.spectra_ref.setSpecRef(pep.getMetaValue("spectrum_reference").toString());
+              row.spectra_ref.setMSFile(msfile_index);
+            }
+            first = false;
+          }
+        }
+        row.best_search_engine_score[1] = MzTabDouble(best_score);
+      }
       // skip export of unidentified feature TODO: move logic a bit up to me more efficient
+      // TODO @timo: what does unidentified have to do with empty accessions? We check for empty identification vector anyway.
       if (!export_unidentified_features
         && row.accession.isNull())
       {
@@ -3087,6 +3128,7 @@ Not sure how to handle these:
       }
       rows.push_back(row);
     }
+
     for (auto &row : rows)
     {
 			remapTargetDecoy_(row.opt_);
@@ -3096,5 +3138,31 @@ Not sure how to handle these:
     return mztab;
   }
 
+  void MzTab::checkSequenceUniqueness_(const vector<PeptideIdentification>& curr_pep_ids)
+  {
+    const auto& refseq = curr_pep_ids[0].getHits()[0].getSequence();
+    for (const auto& pep : curr_pep_ids)
+    {
+      if (pep.getHits().size() > 1)
+      {
+        throw OpenMS::Exception::IllegalArgument(
+            __FILE__
+            , __LINE__
+            , __FUNCTION__
+            , "Consensus features may contain at most one identification. Run IDConflictResolver first to remove ambiguities!");
+      }
+      else
+      {
+        if (pep.getHits()[0].getSequence() != refseq)
+        {
+          throw OpenMS::Exception::IllegalArgument(
+              __FILE__
+              , __LINE__
+              , __FUNCTION__
+              , "Consensus features may contain at most one identification. Run IDConflictResolver first to remove ambiguities!");
+        }
+      }
+    }
+  }
 }
 

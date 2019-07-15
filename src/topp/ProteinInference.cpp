@@ -169,7 +169,7 @@ protected:
         vector<ProteinIdentification> protein_ids;
         vector<PeptideIdentification> peptide_ids;
         f.load(idfile, protein_ids, peptide_ids);
-        merger.insertRun(std::move(protein_ids), std::move(peptide_ids));
+        merger.insertRuns(std::move(protein_ids), std::move(peptide_ids));
       }
       merger.returnResultsAndClear(inferred_protein_ids[0], inferred_peptide_ids);
     }

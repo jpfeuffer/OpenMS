@@ -507,6 +507,8 @@ namespace OpenMS
         }
         else
         {
+          bool haspep = it->getScoreType() == "Posterior Error Probability" || it->getScoreType() == "pep";
+          bool percolator = false;
           if (search_engine_name == "X! Tandem")
           {
             // check if score type is XTandem or qvalue/fdr
@@ -587,11 +589,7 @@ namespace OpenMS
             }
 
             double pep_score = 0.0;
-            if (it->getScoreType() == "Posterior Error Probability" || it->getScoreType() == "pep")
-            {
-              pep_score = h.getScore();
-            }
-            else if (h.metaValueExists("MS:1001493"))
+            if (h.metaValueExists("MS:1001493"))
             {
               pep_score = static_cast<double>(h.getMetaValue("MS:1001493"));
             }
@@ -601,18 +599,27 @@ namespace OpenMS
             }
             else
             {
-              throw Exception::MissingInformation(__FILE__,__LINE__,OPENMS_PRETTY_FUNCTION,"Percolator PEP score missing for pepXML export of Percolator results.");
+              if (!haspep)
+              {
+                // will be written later
+                throw Exception::MissingInformation(__FILE__,__LINE__,OPENMS_PRETTY_FUNCTION,"Percolator PEP score missing for pepXML export of Percolator results.");
+              }
             }
             f << "\t\t\t<search_score" << " name=\"Percolator_PEP\" value=\"" << pep_score << "\"" << "/>\n";
 
-            double probability = 1.0 - pep_score;
             f << "\t\t\t<analysis_result" << " analysis=\"peptideprophet\">\n";
-            f << "\t\t\t\t<peptideprophet_result" << " probability=\"" << probability << "\"";
-            f << " all_ntt_prob=\"(0.0000,0.0000," << probability << ")\"/>\n";
+            f << "\t\t\t\t<peptideprophet_result" << " probability=\"" << 1. - pep_score << "\"";
+            f << " all_ntt_prob=\"(0.0000,0.0000," << 1. - pep_score << ")\"/>\n";
             f << "\t\t\t</analysis_result>" << "\n";
+            percolator = true;
+          } // Anything else
+          else
+          {
+            f << "\t\t\t<search_score" << " name=\"" << it->getScoreType() << "\" value=\"" << h.getScore() << "\"" << "/>\n";
           }
-          // Any search engine with a PEP (e.g. also our IDPEP)
-          else if (it->getScoreType() == "Posterior Error Probability" || it->getScoreType() == "pep")
+          // Any search engine with a PEP (e.g. also our IDPEP) except Percolator which has
+          // written that part already
+          if (haspep && !percolator)
           {
             f << "\t\t\t<search_score" << " name=\"" << it->getScoreType() << "\" value=\"" << h.getScore() << "\"" << "/>\n";
             double probability = 1.0 - h.getScore();
@@ -621,12 +628,6 @@ namespace OpenMS
             f << " all_ntt_prob=\"(0.0000,0.0000," << probability << ")\"/>\n";
             f << "\t\t\t</analysis_result>" << "\n";
           }
-          // Anything else
-          else
-          {
-            f << "\t\t\t<search_score" << " name=\"" << it->getScoreType() << "\" value=\"" << h.getScore() << "\"" << "/>\n";
-          }
-
         }
         f << "\t\t</search_hit>" << "\n";
         f << "\t</search_result>" << "\n";

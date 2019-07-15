@@ -96,20 +96,6 @@ namespace OpenMS
       {
         vertex_t pep = boost::add_vertex(Peptide{seqContainer.first}, graph);
 
-        vector<vertex_t> prots_for_pepseq;
-        GraphConst::adjacency_iterator adjIt, adjIt_end;
-        // This assumes, that at this point, only proteins are connected to peptides
-        boost::tie(adjIt, adjIt_end) = boost::adjacent_vertices(pep, graph);
-        for (; adjIt != adjIt_end; adjIt++)
-        {
-          IDBoostGraph::IDPointer curr_idObj = graph[*adjIt];
-          if (curr_idObj.which() == 0) //protein
-          {
-            boost::add_edge(*adjIt, pep, graph);
-            prots_for_pepseq.push_back(*adjIt);
-          }
-        }
-
         for (Size s = 0; s < seqContainer.second.size(); ++s)
         {
           vertex_t ri = boost::add_vertex(RunIndex{s},graph);
@@ -120,15 +106,21 @@ namespace OpenMS
             boost::add_edge(ri, cs, graph);
             for (const auto& pepVtx : seqContainer.second[s][t])
             {
-              // TODO: Instead of collecting and here in the innermost loop removing
-              // the edges from proteins to PSMs, we could (if we assume that nothing else
-              // was added yet) just clear all (in-)edges for the pepVtx here
-              for (const auto& parent : prots_for_pepseq)
+              GraphConst::adjacency_iterator adjIt, adjIt_end;
+              // This assumes, that at this point, only proteins are connected to PSMS
+              boost::tie(adjIt, adjIt_end) = boost::adjacent_vertices(pepVtx, graph);
+              for (; adjIt != adjIt_end; adjIt++)
               {
-                boost::remove_edge(parent, pepVtx, graph);
+                IDBoostGraph::IDPointer curr_idObj = graph[*adjIt];
+                if (curr_idObj.which() == 0) //protein
+                {
+                  //below would invalidate iterator. We use clear vertex below
+                  //boost::remove_edge(*adjIt, pepVtx, graph); //remove old one from protein
+                  boost::add_edge(*adjIt, pep, graph); //instead add it to the sequence
+                }
               }
-
-              boost::add_edge(cs, pepVtx, graph);
+              boost::clear_vertex(pepVtx, graph);
+              boost::add_edge(cs, pepVtx, graph); //now connect the last level (charges) to this spectrum
             }
           }
         }
@@ -261,7 +253,7 @@ namespace OpenMS
             "Reference (map_index) to non-existing run found at peptide ID."
             " Sth went wrong during merging. Aborting.");
       }
-      pfg = find_it->second;
+      pfg = find_it->second - 1; // Experimental design numbering starts at one
     }
     else
     {
@@ -1210,9 +1202,9 @@ namespace OpenMS
         // Cluster peptides with same sequence and create a replicate and charge hierarchy underneath
         for (; ui != ui_end; ++ui)
         {
-          SequenceToReplicateChargeVariantHierarchy hierarchy{nrPrefractionationGroups_, chargeRange.first, chargeRange.second};
           if (curr_cc[*ui].which() == 0) //protein: same seq peptideHits have to be at a single protein
           {
+            SequenceToReplicateChargeVariantHierarchy hierarchy{nrPrefractionationGroups_, chargeRange.first, chargeRange.second};
             Graph::adjacency_iterator adjIt, adjIt_end;
             boost::tie(adjIt, adjIt_end) = boost::adjacent_vertices(*ui, curr_cc);
             for (; adjIt != adjIt_end; ++adjIt)
@@ -1233,7 +1225,7 @@ namespace OpenMS
                 hierarchy.insert(seq, rep, chg, *adjIt);
               }
             }
-            hierarchy.insertToGraph(*ui, g);
+            hierarchy.insertToGraph(*ui, curr_cc);
           }
         }
 
@@ -1312,7 +1304,7 @@ namespace OpenMS
         for (; ui != ui_end; ++ui)
         {
           //TODO introduce an enum for the types to make it more clear.
-          if (curr_cc[*ui].which() == 6) //peptide: find peptide clusters
+          if (curr_cc[*ui].which() >= 3) //peptide: find peptide clusters
           {
             //TODO assert that there is at least one protein mapping to this peptide! Eg. Require IDFilter removeUnmatched before.
             //Or just check rigorously here.

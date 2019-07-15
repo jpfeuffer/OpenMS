@@ -142,7 +142,7 @@ START_TEST(IDMergerAlgorithm, "$Id$")
       vector<PeptideIdentification> pes{pe1,pe2,pe3,pe4,pe5,pe6,pe7,pe8,pe9};
       vector<ProteinIdentification> prs{pr1,pr2,pr3,pr4};
       IDMergerAlgorithm ima("mymerge");
-      ima.insertRun(prs,pes);
+      ima.insertRuns(prs, pes);
       ProteinIdentification prres;
       vector<PeptideIdentification> peres;
       ima.returnResultsAndClear(prres,peres);
@@ -171,10 +171,10 @@ START_TEST(IDMergerAlgorithm, "$Id$")
       Size pe2size = pe2.size();
 
       IDMergerAlgorithm ima("mymerge");
-      ima.insertRun(std::move(pr1), std::move(pe1));
-      ima.insertRun(std::move(pr2), std::move(pe2));
+      ima.insertRuns(std::move(pr1), std::move(pe1));
+      ima.insertRuns(std::move(pr2), std::move(pe2));
 
-      TEST_EXCEPTION(Exception::BaseException,ima.insertRun({ProteinIdentification{}}, {PeptideIdentification{}}))
+      TEST_EXCEPTION(Exception::BaseException, ima.insertRuns({ProteinIdentification{}}, {PeptideIdentification{}}))
 
       ProteinIdentification prres;
       vector<PeptideIdentification> peres;

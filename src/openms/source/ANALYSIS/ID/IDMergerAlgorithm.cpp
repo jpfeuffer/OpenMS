@@ -48,7 +48,7 @@ namespace OpenMS
       IDMergerAlgorithm::DefaultParamHandler("IDMergerAlgorithm"),
       protResult(),
       pepResult(),
-      //proteinsCollectedHits(0,accessionHash,accessionEqual),
+      proteinsCollectedHits(0,accessionHash,accessionEqual),
       id(runIdentifier)
   {
     defaults_.setValue("annotate_origin",
@@ -61,7 +61,7 @@ namespace OpenMS
 
   //TODO overload to accept a set of specific runIDs only
   //TODO rename to insertRuns
-  void IDMergerAlgorithm::insertRun(
+  void IDMergerAlgorithm::insertRuns(
       std::vector<ProteinIdentification>&& prots,
       std::vector<PeptideIdentification>&& peps
       )
@@ -84,11 +84,11 @@ namespace OpenMS
       //Without any exp. design we assume label-free for checking mods
       checkOldRunConsistency_(prots, this->protResult, "label-free");
     }
-    // if move proteins and move peps
-    movePepIDsAndRefProteinsToResult_(std::move(peps), std::move(prots));
+    // move proteins and move peps
+    movePepIDsAndRefProteinsToResultFaster_(std::move(peps), std::move(prots));
   }
 
-  void IDMergerAlgorithm::insertRun(
+  void IDMergerAlgorithm::insertRuns(
       const std::vector<ProteinIdentification>& prots,
       const std::vector<PeptideIdentification>& peps
   )
@@ -139,11 +139,12 @@ namespace OpenMS
     pepResult.clear();
     //reset internals
     fileOriginToIdx.clear();
-    proteinsCollected.clear();
 
-    //for (ProteinHit p : proteinsCollectedHits)
-    //  prots.getHits().push_back(std::move(p));
-    //proteinsCollectedHits.clear();
+    for (auto& p : proteinsCollectedHits)
+      prots.getHits().push_back(std::move(const_cast<ProteinHit&>(p)));
+    // above invalidates set but we clear right after
+
+    proteinsCollectedHits.clear();
   }
 
   String IDMergerAlgorithm::getNewIdentifier_() const
@@ -157,8 +158,8 @@ namespace OpenMS
     return id + String(buffer.data());
   }
 
-  /*
-  void IDMergerAlgorithm::insertProteinIDsWithSetOfHits_(
+
+  void IDMergerAlgorithm::insertProteinIDs_(
       vector<ProteinIdentification>&& oldProtRuns
   )
   {
@@ -173,8 +174,8 @@ namespace OpenMS
       hits.clear();
     }
   }
-   */
 
+  /* When creating the set on the strings only, use this
   void IDMergerAlgorithm::insertProteinIDs_(
       vector<ProteinIdentification>&& oldProtRuns
   )
@@ -191,7 +192,7 @@ namespace OpenMS
       }
       hits.clear();
     }
-  }
+  }*/
 
   void IDMergerAlgorithm::updateAndMovePepIDs_(
       vector<PeptideIdentification>&& pepIDs,
@@ -199,8 +200,10 @@ namespace OpenMS
       const vector<StringList>& originFiles,
       bool annotate_origin)
   {
-    //TODO if we allow run IDs, we have to do a remove_if, then use the iterator to update and move
-    // the IDs, then erase them.
+    //TODO if we allow run IDs, we should do a remove_if,
+    // then use the iterator to update and move
+    // the IDs, then erase them so we dont encounter them in
+    // subsequent calls of this function
     for (auto &pid : pepIDs)
     {
       const String &runID = pid.getIdentifier();
@@ -239,7 +242,7 @@ namespace OpenMS
                 OPENMS_PRETTY_FUNCTION,
                 "Trying to annotate new map_index for PeptideIdentification "
                 "(" + String(pid.getMZ()) + ", " + String(pid.getRT()) + ") but"
-                                                                         "no old map_index present");
+                "no old map_index present");
           }
         if (oldFileIdx >= originFiles[runIdxIt->second].size())
         {
@@ -306,6 +309,7 @@ namespace OpenMS
     oldProtRuns.clear();
   }
 
+  /* Old version. Quite slower but only copies actually referenced proteins
   void IDMergerAlgorithm::movePepIDsAndRefProteinsToResult_(
       vector<PeptideIdentification>&& pepIDs,
       vector<ProteinIdentification>&& oldProtRuns
@@ -380,7 +384,7 @@ namespace OpenMS
               OPENMS_PRETTY_FUNCTION,
               "Trying to annotate new map_index for PeptideIdentification "
               "(" + String(pid.getMZ()) + ", " + String(pid.getRT()) + ") but"
-                                                                       "no old map_index present");
+              "no old map_index present");
         }
         pid.setMetaValue("map_index", fileOriginToIdx[originFiles[oldProtRunIdx].at(oldFileIdx)]);
       }
@@ -403,7 +407,7 @@ namespace OpenMS
     }
     pepIDs.clear();
     oldProtRuns.clear();
-  }
+  }*/
 
   void IDMergerAlgorithm::copySearchParams_(const ProteinIdentification& from, ProteinIdentification& to)
   {

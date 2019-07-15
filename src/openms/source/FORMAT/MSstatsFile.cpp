@@ -247,7 +247,7 @@ void OpenMS::MSstatsFile::storeLFQ(const OpenMS::String &filename, ConsensusMap 
   {
     OPENMS_LOG_WARN << "No inference was performed, defaulting to one-peptide-rule across all runs." << std::endl;
     ConsensusMapMergerAlgorithm merger;
-    merger.mergeAllIDRunsEasier(consensus_map);
+    merger.mergeAllIDRuns(consensus_map);
     IDFilter::updateProteinReferences(consensus_map, true); //remove dangling peptides
   }
 

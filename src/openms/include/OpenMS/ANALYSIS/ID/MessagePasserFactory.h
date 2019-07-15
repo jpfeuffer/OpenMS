@@ -47,6 +47,7 @@ private:
     const int minInputsPAF = 3;
     double alpha, beta, gamma, p, pepPrior;
     Label offset;
+    std::map<int, double> chgPriors = {{1,0.7},{2,0.9},{3,0.7},{4,0.5},{5,0.5}};
 
     inline double notConditionalGivenSum(unsigned long summ) {
         // use log for better precision
@@ -64,6 +65,9 @@ public:
     TableDependency<Label> createSumEvidenceFactor(size_t nrParents, Label nId, Label pepId);
 
     TableDependency<Label> createSumFactor(size_t nrParents, Label nId);
+
+    TableDependency<Label> createReplicateFactor(Label seqID, Label repID);
+    TableDependency<Label> createChargeFactor(Label repID, Label chargeID, int chg);
 
     AdditiveDependency<Label> createPeptideProbabilisticAdderFactor(const std::set<Label> & parentProteinIDs, Label nId);
     AdditiveDependency<Label> createPeptideProbabilisticAdderFactor(const std::vector<Label> & parentProteinIDs, Label nId);
@@ -185,6 +189,35 @@ TableDependency<L> MessagePasserFactory<L>::createSumFactor(size_t nrParents, L 
   }
   //std::cout << table << std::endl;
   LabeledPMF<L> lpmf({nId}, PMF({0L}, table));
+  //std::cout << lpmf << std::endl;
+  return TableDependency<L>(lpmf,p);
+}
+
+template <typename L>
+TableDependency<L> MessagePasserFactory<L>::createReplicateFactor(L seqId, L repId) {
+  using arr = unsigned long[2];
+  Tensor<double> table({2,2});
+  table[arr{0,0}] = 0.999;
+  table[arr{0,1}] = 0.001;
+  table[arr{1,0}] = 0.1;
+  table[arr{1,1}] = 0.9;
+  //std::cout << table << std::endl;
+  LabeledPMF<L> lpmf({seqId,repId}, PMF({0L,0L}, table));
+  //std::cout << lpmf << std::endl;
+  return TableDependency<L>(lpmf,p);
+}
+
+template <typename L>
+TableDependency<L> MessagePasserFactory<L>::createChargeFactor(L repId, L chgId, int chg) {
+  double chgPrior = chgPriors[chg];
+  using arr = unsigned long[2];
+  Tensor<double> table({2,2});
+  table[arr{0,0}] = 0.999;
+  table[arr{0,1}] = 0.001;
+  table[arr{1,0}] = 0.1;
+  table[arr{1,1}] = chgPrior;
+  //std::cout << table << std::endl;
+  LabeledPMF<L> lpmf({repId,chgId}, PMF({0L,0L}, table));
   //std::cout << lpmf << std::endl;
   return TableDependency<L>(lpmf,p);
 }

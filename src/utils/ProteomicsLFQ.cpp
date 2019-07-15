@@ -774,7 +774,7 @@ protected:
 
       if (protein_ids.size() != 1)
       {
-       OPENMS_LOG_FATAL_ERROR << "Exactly one protein identification runs must be annotated in " << id_file_abs_path << endl;
+       OPENMS_LOG_FATAL_ERROR << "Exactly one protein identification run must be annotated in " << id_file_abs_path << endl;
         return ExitCodes::INCOMPATIBLE_INPUT_DATA;
       }
 
@@ -989,7 +989,7 @@ protected:
     //-------------------------------------------------------------
     // ID conflict resolution
     //-------------------------------------------------------------
-    IDConflictResolverAlgorithm::resolve(consensus_fraction);
+    IDConflictResolverAlgorithm::resolve(consensus_fraction, true);
 
     //-------------------------------------------------------------
     // ConsensusMap normalization (basic)
@@ -1176,6 +1176,19 @@ protected:
       ConsensusXMLFile().store("debug_after_normalization.consensusXML", consensus);
     }
 
+
+    //-------------------------------------------------------------
+    // ID related algorithms
+    // TODO allow all Merging, Error Estimation, Indexing, Inference to work on ConsensusMaps
+    //  Would be nice to have a separate ID datastructure in ConsensusMaps not mangled into the features.
+    //  Problem: We have to think about how to combine Assigned and Unassigned.
+    //  Or at least offer a "view" or "iterator" (still, then we have to change most of the algorithms,
+    //  since they require continuous vectors.
+    // Merging, FDR, Inference mostly done. IDPEP and PepIdxer missing.
+    //-------------------------------------------------------------
+
+    // Since we cant completely work on ConsensusXML yet,
+    // load the IDs again and merge
     IDMergerAlgorithm merger{String("all_merged")};
 
     IdXMLFile f;
@@ -1186,7 +1199,7 @@ protected:
       vector<PeptideIdentification> peptide_ids;
       f.load(idfile, protein_ids, peptide_ids);
 
-      // reannoate MS run if not present
+      // reannotate MS run if not present
       StringList id_msfile_ref;
       protein_ids[0].getPrimaryMSRunPath(id_msfile_ref);
       if (id_msfile_ref.empty())
@@ -1195,17 +1208,14 @@ protected:
         protein_ids[0].setPrimaryMSRunPath(id_msfile_ref);
       }     
  
-      // TODO: Filter for a PSM FDR?
-      merger.insertRun(protein_ids, peptide_ids);
+      // TODO: Filter for a PSM FDR? Better on an experiment-level though
+      merger.insertRuns(std::move(protein_ids), std::move(peptide_ids));
     }
 
+    // For now, we merge all into one. Inference per condition would be another option
     vector<ProteinIdentification> inferred_protein_ids{1};
     vector<PeptideIdentification> inferred_peptide_ids;
     merger.returnResultsAndClear(inferred_protein_ids[0], inferred_peptide_ids);
-
-    // TODO: move this to IDMerger?
-    inferred_protein_ids[0].setScoreType("Posterior Error Probability");
-    inferred_protein_ids[0].setHigherScoreBetter(false);
 
     if (debug_level_ >= 666)
     {
@@ -1213,6 +1223,8 @@ protected:
     }
 
     //TODO We currently do not assume that each of the ID files are correctly indexed
+    //re-index
+    //TODO since we re-index, we could delete all the proteins after loading an idXML
     if (!in_db.empty())
     {
       PeptideIndexing indexer;
@@ -1258,10 +1270,10 @@ protected:
       BasicProteinInferenceAlgorithm bpia;
       bpia.run(inferred_peptide_ids, inferred_protein_ids);
 
-      IDBoostGraph ibg{inferred_protein_ids[0], inferred_peptide_ids,0,false};
-      ibg.computeConnectedComponents();
       if (groups)
       {
+        IDBoostGraph ibg{inferred_protein_ids[0], inferred_peptide_ids,0,false};
+        ibg.computeConnectedComponents();
         ibg.calculateAndAnnotateIndistProteins(true);
       }
     }
@@ -1286,6 +1298,7 @@ protected:
     }
 
     // if no or only partial grouping was performed, add rest of proteins as singleton groups
+    // (assumed by greedy resolution and MSStatsConverter)
     inferred_protein_ids[0].fillIndistinguishableGroupsWithSingletons();
 
     if (debug_level_ >= 666)
@@ -1293,36 +1306,11 @@ protected:
       IdXMLFile().store("debug_mergedIDs_inference.idXML", inferred_protein_ids, inferred_peptide_ids);
     }
 
-    //-------------------------------------------------------------
-    // Protein (and additional peptide) FDR
-    //-------------------------------------------------------------
-    const double maxFDR = getDoubleOption_("proteinFDR");
-    FalseDiscoveryRate fdr;
-    //fdr.applyBasic(inferred_peptide_ids); TODO: check why this doesn't work
-    fdr.applyBasic(inferred_protein_ids[0]);
-
-    if (debug_level_ >= 666)
-    {
-      IdXMLFile().store("debug_mergedIDsFDR.idXML", inferred_protein_ids, inferred_peptide_ids);
-    }
-
-    //TODO think about order of the next two steps (FDR filtering and greedy resolution)
-
-    // Protein FDR filtering
-    //IDFilter::filterHitsByScore(inferred_peptide_ids, maxFDR); // probably not required but shouldn't hurt
-    IDFilter::filterHitsByScore(inferred_protein_ids, maxFDR);
-    IDFilter::updateProteinReferences(inferred_peptide_ids, inferred_protein_ids, true);
-    IDFilter::removeUnreferencedProteins(inferred_protein_ids, inferred_peptide_ids);
-    IDFilter::updateProteinGroups(inferred_protein_ids[0].getIndistinguishableProteins(), inferred_protein_ids[0].getHits());
-
-    if (debug_level_ >= 666)
-    {
-      IdXMLFile().store("debug_mergedIDsFDRFiltered.idXML", inferred_protein_ids, inferred_peptide_ids);
-    }
-
+    // TODO think about order of the next three steps (greedy resolution, FDR calc and filtering)
 
     // Optional greedy group resolution
-    bool greedy_group_resolution = getStringOption_("protein_quantification") == "shared_peptides" ? true : false;
+    // TODO finish greedy resolution on the new graph structure, since we built it for inference already anyway
+    bool greedy_group_resolution = getStringOption_("protein_quantification") == "shared_peptides";
     if (greedy_group_resolution)
     {
       PeptideProteinResolution ppr{};
@@ -1330,11 +1318,36 @@ protected:
       ppr.resolveGraph(inferred_protein_ids[0], inferred_peptide_ids);
       if (debug_level_ >= 666)
       {
-        IdXMLFile().store("debug_mergedIDsFDRFilteredGreedyResolved.idXML", inferred_protein_ids, inferred_peptide_ids);
+        IdXMLFile().store("debug_mergedIDsGreedyResolved.idXML", inferred_protein_ids, inferred_peptide_ids);
       }
     }
 
-    // ensure that only one final inference result is generated
+    //-------------------------------------------------------------
+    // Protein (and additional peptide?) FDR
+    //-------------------------------------------------------------
+    const double maxFDR = getDoubleOption_("proteinFDR");
+    FalseDiscoveryRate fdr;
+    //fdr.applyBasic(inferred_peptide_ids); TODO: what if we do both?
+    fdr.applyBasic(inferred_protein_ids[0]);
+
+    if (debug_level_ >= 666)
+    {
+      IdXMLFile().store("debug_mergedIDsGreedyResolvedFDR.idXML", inferred_protein_ids, inferred_peptide_ids);
+    }
+
+    // FDR filtering
+    //IDFilter::filterHitsByScore(inferred_peptide_ids, maxFDR); // probably not required but shouldn't hurt
+    IDFilter::filterHitsByScore(inferred_protein_ids, maxFDR);
+    IDFilter::updateProteinReferences(inferred_peptide_ids, inferred_protein_ids, true);
+    //IDFilter::removeUnreferencedProteins(inferred_protein_ids, inferred_peptide_ids); // if we dont filter peptides for now, we dont need this
+    IDFilter::updateProteinGroups(inferred_protein_ids[0].getIndistinguishableProteins(), inferred_protein_ids[0].getHits());
+
+    if (debug_level_ >= 666)
+    {
+      IdXMLFile().store("debug_mergedIDsGreedyResolvedFDRFiltered.idXML", inferred_protein_ids, inferred_peptide_ids);
+    }
+
+    // ensure that only one final inference result is generated for now
     assert(inferred_protein_ids.size() == 1);
 
     // do we only want to keep strictly unique peptides (e.g., no groups)?
@@ -1347,12 +1360,13 @@ protected:
       }
     }
 
-    // filter decoy proteins, update groups so decoy proteins are also removed there, and remove PSMs that mapped to them. 
+    // filter decoy proteins, update groups so decoy proteins are also removed there, and remove PSMs that mapped to them.
+    //TODO shouldnt be needed since FDR calculation by default filters decoys
     IDFilter::removeDecoyHits(inferred_protein_ids);
     IDFilter::updateProteinGroups(inferred_protein_ids[0].getIndistinguishableProteins(), inferred_protein_ids[0].getHits());
     IDFilter::updateProteinReferences(inferred_peptide_ids, inferred_protein_ids, true);
 
-    // compute coverage
+    // compute coverage (sequence was annotated during PeptideIndexing)
     inferred_protein_ids[0].computeCoverage(inferred_peptide_ids);
 
     // determine observed modifications (exclude fixed mods)
@@ -1462,14 +1476,16 @@ protected:
     quantifier.readQuantData(consensus, design);
 
     // TODO: @timo, Check this. inferred_peptide_ids will hold a superset of the IDs
-    // in the consensusXML. Should work.
+    //  in the consensusXML. Should always work. No worries as soon as ID stuff works on ConsensusMaps
     quantifier.quantifyPeptides(inferred_peptide_ids);
 
     //-------------------------------------------------------------
     // Protein quantification
     //-------------------------------------------------------------
 
-    // TODO: ProteinQuantifier on (merged?) consensusXML (with 1% FDR?) + inference ids (unfiltered?)? 
+    // TODO: @timo: ProteinQuantifier on (merged?) consensusXML (with 1% FDR?) + inference ids (unfiltered?)?
+
+    // Should always be there by now, even if just singletons (TODO a bit of a waste then, though)
     if (inferred_protein_ids[0].getIndistinguishableProteins().empty())
     {
       throw Exception::MissingInformation(
@@ -1494,15 +1510,11 @@ protected:
     // Export of MzTab file as final output
     //-------------------------------------------------------------
 
-    if (debug_level_ >= 666)
-    {
-      IdXMLFile().store("debug_quant1.idXML", inferred_protein_ids, inferred_peptide_ids);
-    }
-
     // Annotate quants to protein(groups) for easier export in mzTab
+    /*
     if (debug_level_ >= 666)
     {
-      for (auto r : quantifier.getProteinResults())
+      for (const auto& r : quantifier.getProteinResults())
       {
         std::cout << "Accession:" << r.first << "\n";
         for (auto s : r.second.total_abundances)
@@ -1511,7 +1523,7 @@ protected:
         }
         std::cout << "\n";
       }
-    }
+    }*/
 
     PeptideAndProteinQuant::annotateQuantificationsToProteins(protein_quants, inferred_protein_ids[0], design.getNumberOfFractionGroups());
     if (debug_level_ >= 666)
@@ -1520,18 +1532,16 @@ protected:
     }
     vector<ProteinIdentification>& proteins = consensus.getProteinIdentifications();
     proteins.insert(proteins.begin(), inferred_protein_ids[0]); // insert inference information as first protein identification
-    proteins[0].setSearchEngine("Fido");  // Note: currently needed so mzTab Exporter knows how to handle inference data in first prot. ID
-    //proteins.resize(1); //TODO it SHOULD suffice to leave only the merged+inferred run as the first one.
+
     // For correctness we would need to set the run reference in the pepIDs of the consensusXML all to the first run then
     // And probably make sure that peptides that correspond to filtered out proteins are not producing errors
     // e.g. by removing them with a Filter beforehand.
 
-
-    consensus.resolveUniqueIdConflicts(); // TODO: find out why this is needed to get proper UIDs in consensus
+    consensus.resolveUniqueIdConflicts(); // TODO: @timo: find out why this is needed to get proper UIDs in consensus
     if (!getStringOption_("out_cxml").empty())
     {
       // Note: idXML and consensusXML doesn't support writing quantification at protein groups
-      // Note: consensusXML currently doesn't support writing out inference data
+      // Note: consensusXML currently doesn't support writing out inference data (TODO: it does not?)
       // (they are neverless stored and passed to mzTab for proper export)
       //IdXMLFile().store("debug_ids.idXML", proteins, infered_peptides);
       ConsensusXMLFile().store(getStringOption_("out_cxml"), consensus);
@@ -1539,12 +1549,14 @@ protected:
 
     if (debug_level_ >= 666)
     {
-      IdXMLFile().store("debug_keepUnique2.idXML", inferred_protein_ids, inferred_peptide_ids);
+      //TODO @timo: What changed in the IDs up to the last write? Commented out for now.
+      //IdXMLFile().store("debug_keepUnique2.idXML", inferred_protein_ids, inferred_peptide_ids);
     }
 
     // Fill MzTab with meta data and quants annotated in identification data structure
     const bool report_unmapped(true);
     const bool report_unidentified_features(false);
+
     MzTab m = MzTab::exportConsensusMapToMzTab(
       consensus, 
       String("null"),   

@@ -48,7 +48,7 @@ START_TEST(ConsensusMapMergerAlgorithm, "$Id$")
         ConsensusMap cmap;
         cf.load(OPENMS_GET_TEST_DATA_PATH("BSA.consensusXML"), cmap);
         ConsensusMapMergerAlgorithm cmerge;
-        cmerge.mergeAllIDRunsEasier(cmap);
+        cmerge.mergeAllIDRuns(cmap);
         TEST_EQUAL(cmap.getProteinIdentifications().size(), 1)
       }
     END_SECTION

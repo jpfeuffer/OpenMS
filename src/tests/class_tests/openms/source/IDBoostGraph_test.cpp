@@ -96,27 +96,26 @@ START_TEST(IDBoostGraph, "$Id$")
           vector<ProteinIdentification> prots;
           vector<PeptideIdentification> peps;
           IdXMLFile idf;
-          idf.load(OPENMS_GET_TEST_DATA_PATH("newMergerTest_out.idXML"),prots,peps);
+          idf.load(OPENMS_GET_TEST_DATA_PATH("IDBoostGraph_test_in.idXML"),prots,peps);
+
           IDBoostGraph idb{prots[0], peps, 1, true};
           TEST_EQUAL(idb.getNrConnectedComponents(), 0)
-          TEST_EQUAL(boost::num_vertices(idb.getComponent(0)), 9)
+          TEST_EQUAL(boost::num_vertices(idb.getComponent(0)), 8)
           idb.computeConnectedComponents();
-          TEST_EQUAL(idb.getNrConnectedComponents(), 3)
+          TEST_EQUAL(idb.getNrConnectedComponents(), 2)
           // The next lines do not sum up to 9 because protein PH2 is unmatched
           // If you want to avoid that, filter unmatched proteins first!
-          TEST_EQUAL(boost::num_vertices(idb.getComponent(0)), 3)
-          TEST_EQUAL(boost::num_vertices(idb.getComponent(1)), 4)
-          TEST_EQUAL(boost::num_vertices(idb.getComponent(2)), 2)
+          TEST_EQUAL(boost::num_vertices(idb.getComponent(0)), 6)
+          TEST_EQUAL(boost::num_vertices(idb.getComponent(1)), 2)
 
-          /* TODO
           idb.clusterIndistProteinsAndPeptidesAndExtendGraph();
 
-          TEST_EQUAL(idb.getNrConnectedComponents(), 3)
+          TEST_EQUAL(idb.getNrConnectedComponents(), 2)
           // Only cc 0 and 1 have indist prot group
-          TEST_EQUAL(boost::num_vertices(idb.getComponent(0)), 4)
-          TEST_EQUAL(boost::num_vertices(idb.getComponent(1)), 5)
-          TEST_EQUAL(boost::num_vertices(idb.getComponent(2)), 2)
-           */
+          //TODO we could reduce the number of nodes by removing ones without evidence
+          TEST_EQUAL(boost::num_vertices(idb.getComponent(0)), 25)
+          TEST_EQUAL(boost::num_vertices(idb.getComponent(1)), 11)
+
         }
     END_SECTION
 

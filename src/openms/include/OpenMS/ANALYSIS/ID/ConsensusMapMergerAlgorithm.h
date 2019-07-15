@@ -44,6 +44,12 @@
 
 namespace OpenMS
 {
+  /**
+   * @brief Merges identification data in ConsensusMaps
+   * Has some stuff in common with IDMergerAlgorithm and therefore could be merged
+   * but you can save some overhead by only going through the CMap once. Therefore
+   * the extra class.
+   */
   class OPENMS_DLLAPI ConsensusMapMergerAlgorithm:
     public DefaultParamHandler,
     public ProgressLogger
@@ -60,7 +66,6 @@ namespace OpenMS
     /// i.e. might occur in several PeptideIdentifications afterwards
     /// @throws MissingInformationException for e.g. missing map_indices in PeptideIDs
     void mergeAllIDRuns(ConsensusMap& cmap) const;
-    void mergeAllIDRunsEasier(ConsensusMap& cmap) const;
 
     /// Takes a ConsensusMap and a mapping between ConsensusMap column index (map index) and
     /// the new ProteinIdentificationRun index and merges them. If you know the number of resulting
@@ -91,7 +96,7 @@ namespace OpenMS
     /// Moves multiple ID vectors into a long one
     template<class Identification>
     static void concatenateIdentifications_(
-        std::vector<std::vector<Identification>>& oldIDs,
+        std::vector<std::vector<Identification>>&& oldIDs,
         std::vector<Identification>& newIDs)
     {
       for (auto& IDs : oldIDs)
@@ -130,10 +135,13 @@ namespace OpenMS
         std::vector<std::unordered_set<std::string>> proteinsCollected
     ) const;
 
-    static size_t accessionHash(const ProteinHit& p){
+
+    static size_t accessionHash(const ProteinHit& p)
+    {
       return std::hash<String>()(p.getAccession());
     }
-    static bool accessionEqual(const ProteinHit& p1, const ProteinHit& p2){
+    static bool accessionEqual(const ProteinHit& p1, const ProteinHit& p2)
+    {
       return p1.getAccession() == p2.getAccession();
     }
     using hash_type = std::size_t (*)(const ProteinHit&);

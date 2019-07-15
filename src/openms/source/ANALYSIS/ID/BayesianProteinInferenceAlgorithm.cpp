@@ -767,13 +767,13 @@ namespace OpenMS
       }
 
       // TODO try to calc AUC partial only (e.g. up to 5% FDR)
-     OPENMS_LOG_INFO << "Peptide FDR AUC before protein inference: " << pepFDR.rocN(cmap, 0) << std::endl;
+      OPENMS_LOG_INFO << "Peptide FDR AUC before protein inference: " << pepFDR.rocN(cmap, 0) << std::endl;
 
       IDBoostGraph ibg(proteinIDs[0], cmap, nr_top_psms, use_run_info, use_unannotated_ids, exp_des);
       inferPosteriorProbabilities_(ibg);
       setScoreTypeAndSettings_(proteinIDs[0]);
 
-     OPENMS_LOG_INFO << "Peptide FDR AUC after protein inference: " << pepFDR.rocN(cmap, 0) << std::endl;
+      OPENMS_LOG_INFO << "Peptide FDR AUC after protein inference: " << pepFDR.rocN(cmap, 0) << std::endl;
     }
     else if (cmap.getProteinIdentifications().size() > 1)
     {
@@ -790,13 +790,13 @@ namespace OpenMS
         }
 
         //TODO try to calc AUC partial only (e.g. up to 5% FDR)
-       OPENMS_LOG_INFO << "Peptide FDR AUC before protein inference: " << pepFDR.rocN(cmap, 0, proteinID.getIdentifier()) << std::endl;
+        OPENMS_LOG_INFO << "Peptide FDR AUC before protein inference: " << pepFDR.rocN(cmap, 0, proteinID.getIdentifier()) << std::endl;
 
         setScoreTypeAndSettings_(proteinID);
         IDBoostGraph ibg(proteinID, cmap, nr_top_psms, use_run_info, use_unannotated_ids);
         inferPosteriorProbabilities_(ibg);
 
-       OPENMS_LOG_INFO << "Peptide FDR AUC after protein inference: " << pepFDR.rocN(cmap, 0, proteinID.getIdentifier()) << std::endl;
+        OPENMS_LOG_INFO << "Peptide FDR AUC after protein inference: " << pepFDR.rocN(cmap, 0, proteinID.getIdentifier()) << std::endl;
       }
     }
   }

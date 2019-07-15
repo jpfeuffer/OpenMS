@@ -1012,6 +1012,7 @@ public:
       return names;
     }
 
+    static void checkSequenceUniqueness_(const std::vector<PeptideIdentification>& curr_pep_ids);
 
     MzTabMetaData meta_data_;
     MzTabProteinSectionRows protein_data_;

@@ -251,7 +251,7 @@ protected:
         // Not so easy to implement at first sight. Merge groups whenever one protein overlaps?
         prots[0].getIndistinguishableProteins().clear();
         prots[0].getProteinGroups().clear();
-        merger.insertRun(prots, peps);
+        merger.insertRuns(prots, peps);
       }
       merger.returnResultsAndClear(mergedprots[0], mergedpeps);
     }

@@ -125,9 +125,6 @@ namespace OpenMS
     // one of label-free, labeled_MS1, labeled_MS2
     const String & experiment_type = cmap.getExperimentType();
 
-    //TODO actually the consistency only needs to be checked among the runs that are actually merged, not all.
-    checkOldRunConsistency_(cmap.getProteinIdentifications(), experiment_type);
-
     // Not fully supported yet because an ID would need to reference multiple protID runs.
     // we could replicate the ID in the future or allow multiple references.
     bool labelfree = true;
@@ -194,7 +191,6 @@ namespace OpenMS
           auto it = runIDToNewRunIdcs.emplace(oldProtID.getIdentifier(), set<Size>());
           if (!it.second)
           {
-            //TODO this should not happen. See recent github issue by chris
             OPENMS_LOG_WARN << "Duplicate protein run ID found. Uniquifying it." << endl;
             oldProtID.setIdentifier(oldProtID.getIdentifier()+"_"+count);
             it = runIDToNewRunIdcs.emplace(oldProtID.getIdentifier(), set<Size>());
@@ -221,6 +217,8 @@ namespace OpenMS
 
       for (const auto& newrunid : runIDToNewRunIdcsPair.second)
       {
+        // go through new runs and fill the proteins and update search settings
+        // if first time filling this new run:
         //TODO safe to check for empty identifier?
         if (newProtIDs.at(newrunid).getIdentifier().empty())
         {
@@ -233,15 +231,18 @@ namespace OpenMS
           newProtIDs[newrunid].setPrimaryMSRunPath(toFill);
           newProtIDs[newrunid].setIdentifier("condition" + String(newrunid));
         }
+        // if not, merge settings or check consistency
         else
         {
           //check consistency and add origins
-          checkRunSettings_(*it, newProtIDs[newrunid], cmap.getExperimentType());
+          checkRunSettings_(*it, newProtIDs[newrunid], experiment_type);
           StringList toFill; it->getPrimaryMSRunPath(toFill); // new ones
           newProtIDs[newrunid].addPrimaryMSRunPath(toFill); //add to previous
         }
       }
 
+      //Insert hits into collection with empty set (if not present yet) and
+      // add destination run indices
       for (auto& hit : it->getHits())
       {
         const auto& foundIt = proteinsCollectedHitsRuns.emplace(std::move(hit), set<Size>());
@@ -250,6 +251,7 @@ namespace OpenMS
       it->getHits().clear(); //not needed anymore and moved anyway
     }
 
+    // copy the protein hits into the destination runs
     for (const auto& protToNewRuns : proteinsCollectedHitsRuns)
     {
       for (Size runID : protToNewRuns.second)
@@ -258,99 +260,7 @@ namespace OpenMS
       }
     }
 
-   /* old way
-    vector<unordered_set<ProteinHit>> proteinsCollectedHits{new_size};
-    for (auto& runIDToNewRunIdcsPair : runIDToNewRunIdcs)
-    {
-      // find old run
-      auto it = cmap.getProteinIdentifications().begin();
-      for (; it != cmap.getProteinIdentifications().end(); ++it)
-      {
-        if (it->getIdentifier() == runIDToNewRunIdcsPair.first) break;
-      }
-
-      if (runIDToNewRunIdcsPair.second.size() == 1)
-      {
-
-        typedef std::vector<ProteinHit>::iterator iter_t;
-        Size newrunid = *runIDToNewRunIdcsPair.second.begin();
-        if (nrInputsForNewRunIDs[newrunid] == 1)
-        {
-          swap(*it, newProtIDs[newrunid]);
-          newProtIDs[newrunid].setIdentifier("condition" + String(newrunid));
-        }
-        else
-        {
-          if (newProtIDs[newrunid].getIdentifier().empty())
-          {
-            // you can put the whole run there
-            swap(*it, newProtIDs[newrunid]);
-            newProtIDs[newrunid].setIdentifier("condition" + String(newrunid));
-            auto& hits = newProtIDs[newrunid].getHits();
-            proteinsCollectedHits[newrunid].insert(
-                std::move_iterator<iter_t>(hits.begin()),
-                std::move_iterator<iter_t>(hits.end())
-            );
-            hits.clear();
-          }
-          else
-          {
-            // you can move and merge
-            checkRunSettings_(*it,newProtIDs[newrunid],newrunid);
-            StringList toFill;
-            newProtIDs[newrunid].getPrimaryMSRunPath(toFill); //add previous
-            it->getPrimaryMSRunPath(toFill); //add new
-            newProtIDs[newrunid].setPrimaryMSRunPath(toFill); //set
-            auto& hits = it->getHits();
-            proteinsCollectedHits[newrunid].insert(
-                std::move_iterator<iter_t>(hits.begin()),
-                std::move_iterator<iter_t>(hits.end())
-            );
-            hits.clear();
-          }
-        }
-      }
-      else
-      {
-        auto &hits = it->getHits();
-        //TODO do it on a per-Hit-basis, so we can precalculate hashes
-        //you need to copy
-        for (const auto &newrunid : runIDToNewRunIdcsPair.second)
-        {
-          if (nrInputsForNewRunIDs[newrunid] == 1)
-          {
-            //copy without merging
-            newProtIDs[newrunid] = *it;
-            newProtIDs[newrunid].setIdentifier("condition" + String(newrunid));
-          }
-          else
-          {
-            if (newProtIDs[newrunid].getIdentifier().empty())
-            {
-              newProtIDs[newrunid].setSearchEngine(it->getSearchEngine());
-              newProtIDs[newrunid].setSearchEngineVersion(it->getSearchEngineVersion());
-              newProtIDs[newrunid].setSearchParameters(it->getSearchParameters());
-              StringList toFill;
-              it->getPrimaryMSRunPath(toFill);
-              newProtIDs[newrunid].setPrimaryMSRunPath(toFill);
-              newProtIDs[newrunid].setIdentifier("condition" + String(newrunid));
-            }
-            else
-            {
-              checkRunSettings_(*it, newProtIDs[newrunid], newrunid);
-              StringList toFill;
-              newProtIDs[newrunid].getPrimaryMSRunPath(toFill); //add previous
-              it->getPrimaryMSRunPath(toFill); //add new
-              newProtIDs[newrunid].setPrimaryMSRunPath(toFill); //set
-            }
-            proteinsCollectedHits[newrunid].insert(hits.begin(), hits.end());
-          }
-          // proteins fully distributed -> clear
-          hits.clear();
-        }
-      }
-    } */
-
+    //Now update the references in the PeptideHits
     //TODO double check the PrimaryRunPaths with the initial requested merge
 
     function<void(PeptideIdentification&)> fun = [&runIDToNewRunIdcs, &newProtIDs](PeptideIdentification& pid)
@@ -377,8 +287,9 @@ namespace OpenMS
   }
 
   //merge proteins across fractions and replicates
-  void ConsensusMapMergerAlgorithm::mergeAllIDRunsEasier(ConsensusMap& cmap) const
+  void ConsensusMapMergerAlgorithm::mergeAllIDRuns(ConsensusMap& cmap) const
   {
+    // Everything needs to agree
     checkOldRunConsistency_(cmap.getProteinIdentifications(), cmap.getExperimentType());
 
     ProteinIdentification newProtIDRun;
@@ -439,8 +350,9 @@ namespace OpenMS
     //TODO remove unreferenced proteins? Can this happen when merging all? I think not.
   }
 
-  //merge proteins across fractions and replicates
-  void ConsensusMapMergerAlgorithm::mergeAllIDRuns(ConsensusMap& cmap) const
+  //merge proteins across fractions and replicates only copying over referenced proteins
+/*
+  void ConsensusMapMergerAlgorithm::mergeAllIDRunsOld(ConsensusMap& cmap) const
   {
     checkOldRunConsistency_(cmap.getProteinIdentifications(), cmap.getExperimentType());
 
@@ -540,6 +452,7 @@ namespace OpenMS
     }
     cmap.setProteinIdentifications(vector<ProteinIdentification>{newProtIDRun});
   }
+*/
 
   //merge proteins across fractions and replicates. Sort peptides into the same amount of vec<PepIDs>
   //I think this should only ever work for labelfree since we do not store the labels in the idXML structures

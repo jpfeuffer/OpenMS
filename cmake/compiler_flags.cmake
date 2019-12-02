@@ -46,7 +46,6 @@ endif()
 if (CMAKE_COMPILER_IS_GNUCXX)
 
   add_compile_options(-Wall -Wextra 
-    -fvisibility=hidden
     -Wno-non-virtual-dtor 
     -Wno-unknown-pragmas
     -Wno-long-long 

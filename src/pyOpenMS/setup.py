@@ -186,6 +186,10 @@ if not iswin:
 
 mnames = ["pyopenms_%s" % (k+1) for k in range(int(PY_NUM_MODULES))]
 ext = []
+
+##WARNING debug
+libraries.extend("boost_regex-mt-x64")
+
 for module in mnames:
 
     ext.append(Extension(
@@ -196,6 +200,7 @@ for module in mnames:
         libraries=libraries,
         include_dirs=include_dirs + autowrap_include_dirs,
         extra_compile_args=extra_compile_args,
+        extra_objects=["/Users/builder/jenkins/ws/openms_nightly_packaging/87227eb0/contrib_build/lib/libboost_regex-mt-x64.a"],
         extra_link_args=extra_link_args,
 		define_macros=[('BOOST_ALL_NO_LIB', None)] ## Deactivates boost autolink (esp. on win).
 		## Alternative is to specify the boost naming scheme (--layout param; easy if built from contrib)

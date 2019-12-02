@@ -48,7 +48,7 @@ endfunction()
 
 #------------------------------------------------------------------------------
 # find and handle python
-find_package(PythonInterp REQUIRED)
+find_package(Python COMPONENTS Interpreter Development)
 
 # find out python version info
 execute_process(
@@ -157,6 +157,12 @@ else()
         COMMAND
         ${PYTHON_EXECUTABLE} -c "from __future__ import print_function; import autowrap; print ('%d.%d.%d' % (autowrap.version))"
         OUTPUT_VARIABLE AUTOWRAP_VERSION
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    execute_process(
+        COMMAND
+        ${PYTHON_EXECUTABLE} -c "from __future__ import print_function; import autowrap; print (''.join([autowrap.__path__[0],'/data_files/autowrap/']))"
+        OUTPUT_VARIABLE AUTOWRAP_INCLUDES
         OUTPUT_STRIP_TRAILING_WHITESPACE
     )
     if(_AUTOWRAP_VERSION_OK)
@@ -270,6 +276,34 @@ if(NUMPY_MISSING OR CYTHON_MISSING OR NOT CYTHON_VERSION_OK OR NOT AUTOWRAP_VERS
   message(FATAL_ERROR "Required Python modules not found or out of date")
 endif()
 
+
+    
+    # Find NumPy headers
+    exec_program(${PYTHON_EXECUTABLE}
+        ARGS "-c \"import numpy; print(numpy.get_include())\""
+        OUTPUT_VARIABLE NUMPY_INCLUDE_DIR
+        RETURN_VALUE NUMPY_NOT_FOUND
+        )
+    if(NUMPY_NOT_FOUND)
+        message(FATAL_ERROR "NumPy headers not found")
+    endif()
+
+    # Find Python headers
+    exec_program(${PYTHON_EXECUTABLE}
+        ARGS "-c \"import sysconfig; print(sysconfig.get_paths()['include'])\""
+        OUTPUT_VARIABLE PYTHON_INCLUDE_DIRS
+        RETURN_VALUE PYTHON_INCLUDE_DIRS_NOT_FOUND
+        )
+    if(PYTHON_INCLUDE_DIRS_NOT_FOUND)
+        message(FATAL_ERROR "Python headers not found")
+    endif()
+
+    # This goes after, since it uses PythonInterp as a hint
+    if(WIN32)
+        find_package(PythonLibs 3.5 REQUIRED)
+    endif()
+
+
 #------------------------------------------------------------------------------
 # clean python build directory from former cmake run (if exists)
 # this can contain older versions of openms shared lib and might confuse
@@ -360,9 +394,15 @@ set(_env_py ${CMAKE_BINARY_DIR}/pyOpenMS/env.py)
 #------------------------------------------------------------------------------
 # If there are other, external libraries that we would like to link, we can
 # specify them here:
+
 set(INCLUDE_DIRS_EXTEND "")
 set(LIBRARIES_EXTEND "")
 set(LIBRARY_DIRS_EXTEND "")
+set(OBJECTS_EXTEND "")
+
+if (BOOST_USE_STATIC)
+  set(LIBRARIES_EXTEND "")
+endif()
 
 if (WITH_CRAWDAD)
   set(INCLUDE_DIRS_EXTEND "\"${CRAWDAD_INCLUDE_DIRS}\", \"${CRAWDAD_INCLUDE_DIRS}/msmat\", ${INCLUDE_DIRS_EXTEND}")
@@ -388,6 +428,7 @@ set(PYOPENMS_INCLUDE_DIRS
   ${OpenMS_INCLUDE_DIRECTORIES}
   ${SuperHirn_INCLUDE_DIRECTORIES}
   ${QT_INCLUDE_DIR}
+  ${PROJECT_SOURCE_DIR}/extra_includes
 )
 
 list(REMOVE_DUPLICATES PYOPENMS_INCLUDE_DIRS)
@@ -435,6 +476,37 @@ endif()
 
 configure_file(${_env_py_in} ${_env_py} @ONLY)
 
+##WARNING DEBUG
+file(GENERATE
+    OUTPUT
+    ${_env_py}
+    INPUT
+    ${_env_py}
+)
+
+
+add_custom_target(pyopenms_cmake)
+set(PYOPENMS_SRC )
+
+foreach(nr RANGE 1 ${PY_NUM_MODULES})
+  list(APPEND PYOPENMS_SRC "${CMAKE_BINARY_DIR}/pyOpenMS/pyopenms/pyopenms_${nr}.cpp")
+  Python_add_library(pyopenms_${nr} MODULE "${CMAKE_BINARY_DIR}/pyOpenMS/pyopenms/pyopenms_${nr}.cpp" )
+  target_link_libraries(pyopenms_${nr} PRIVATE OpenMS)
+  target_include_directories(pyopenms_${nr} SYSTEM PUBLIC ${PYOPENMS_INCLUDE_DIRS} ${PYTHON_INCLUDE_DIRS} ${NUMPY_INCLUDE_DIR} ${AUTOWRAP_INCLUDES})
+  target_compile_options(pyopenms_${nr} PRIVATE  -Wno-unused-member-function -Wno-builtin-macro-redefined -Wno-unused -Wno-zero-as-null-pointer-constant)
+  set_target_properties(pyopenms_${nr} PROPERTIES
+    OUTPUT_NAME pyopenms_${nr}.cpython-37m-darwin
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN 1
+    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/pyOpenMS/pyopenms"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/pyOpenMS/pyopenms"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/pyOpenMS/pyopenms"
+)
+  add_dependencies(pyopenms_${nr} pyopenms_create_cpp)
+  add_dependencies(pyopenms_cmake pyopenms_${nr}) 
+endforeach()
+
+
 #------------------------------------------------------------------------------
 # create targets in makefile
 
@@ -442,10 +514,12 @@ IF(${CMAKE_SYSTEM_NAME} MATCHES "Linux" AND PY_NO_OUTPUT)
   add_custom_target(pyopenms_create_cpp
     COMMAND ${PYTHON_EXECUTABLE} create_cpp_extension.py 2> /dev/null
     DEPENDS prepare_pyopenms_libs
+    BYPRODUCTS ${PYOPENMS_SRC}
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/pyOpenMS )
 ELSE()
   add_custom_target(pyopenms_create_cpp
     COMMAND ${PYTHON_EXECUTABLE} create_cpp_extension.py
+    BYPRODUCTS ${PYOPENMS_SRC}
     DEPENDS prepare_pyopenms_libs
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/pyOpenMS )
 ENDIF()

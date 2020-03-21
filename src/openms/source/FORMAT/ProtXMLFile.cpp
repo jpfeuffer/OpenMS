@@ -94,7 +94,7 @@ namespace OpenMS
       ProteinIdentification::SearchParameters sp = prot_id_->getSearchParameters();
       sp.db = db;
       // find a matching enzyme name
-      sp.digestion_enzyme = *(ProteaseDB::getInstance()->getEnzyme(enzyme));
+      sp.digestion_enzyme.emplace_back(*(ProteaseDB::getInstance()->getEnzyme(enzyme)));
       prot_id_->setSearchParameters(sp);
       prot_id_->setScoreType("ProteinProphet probability");
       prot_id_->setHigherScoreBetter(true);

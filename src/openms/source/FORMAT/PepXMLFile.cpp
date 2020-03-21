@@ -133,30 +133,33 @@ namespace OpenMS
     }
 
     f << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" << "\n";
+    //TODO improve this header
     f << "<msms_pipeline_analysis date=\"2007-12-05T17:49:46\" xmlns=\"http://regis-web.systemsbiology.net/pepXML\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:schemaLocation=\"http://sashimi.sourceforge.net/schema_revision/pepXML/pepXML_v117.xsd\" summary_xml=\".xml\">" << "\n";
     f << "<msms_run_summary base_name=\"" << base_name << "\" raw_data_type=\"raw\" raw_data=\"." << raw_data << "\" search_engine=\"" << search_engine_name << "\">" << "\n";
-    String enzyme_name = search_params.digestion_enzyme.getName();
-    f << "\t<sample_enzyme name=\"";
-    f << enzyme_name.toLower() << "\">" << "\n";
-    f << "\t\t<specificity cut=\"";
-    if (search_params.digestion_enzyme.getRegEx() != "")
+    for (const auto& enz : search_params.digestion_enzyme)
     {
-      vector<String> sub_regex;
-      search_params.digestion_enzyme.getRegEx().split(")",sub_regex);
-      boost::match_results<std::string::const_iterator> results;
-      static const boost::regex e("(.*?)([A-Z]+)(.*?)");
-      if (boost::regex_match(sub_regex[0], results, e))
+      String enzyme_name = enz.getName();
+      f << "\t<sample_enzyme name=\"";
+      f << enzyme_name.toLower() << "\">" << "\n";
+      f << "\t\t<specificity cut=\"";
+      if (!enz.getRegEx().empty())
       {
-        f << results[2];
+        vector<String> sub_regex;
+        enz.getRegEx().split(")",sub_regex);
+        boost::match_results<std::string::const_iterator> results;
+        static const boost::regex e("(.*?)([A-Z]+)(.*?)");
+        if (boost::regex_match(sub_regex[0], results, e))
+        {
+          f << results[2];
+        }
+        if (sub_regex[1].hasSubstring("!P"))
+        {
+          f << "\" no_cut=\"P";
+        }
       }
-      if (sub_regex[1].hasSubstring("!P"))
-      {
-        f << "\" no_cut=\"P";
-      }
+      f << "\" sense=\"C\"/>" << "\n";
+      f << "\t</sample_enzyme>" << "\n";
     }
-    f << "\" sense=\"C\"/>" << "\n";
-    f << "\t</sample_enzyme>" << "\n";
-
     f << "\t<search_summary base_name=\"" << base_name;
     f << "\" search_engine=\"" << search_engine_name;
     f << "\" precursor_mass_type=\"";
@@ -367,10 +370,14 @@ namespace OpenMS
 
         f << pe.getProteinAccession();
 
+        // TODO implement export of indistinguishable groups
+        // TODO for every enzyme try if it might produce it and then how many termini it matches
+        //  maybe just take the first on matching
         f << "\" num_tot_proteins=\"1\" num_matched_ions=\"0\" tot_num_ions=\"0\" calc_neutral_pep_mass=\"" << precisionWrapper(precursor_neutral_mass)
           << "\" massdiff=\"0.0\" num_tol_term=\"";
         Int num_tol_term = 1;
-        if ((pe.getAABefore() == 'R' || pe.getAABefore() == 'K') && search_params.digestion_enzyme.getName() == "Trypsin")
+        //TODO implement getNumMatchedTermini for the enzymes!
+        if ((pe.getAABefore() == 'R' || pe.getAABefore() == 'K') && search_params.digestion_enzyme[0].getName() == "Trypsin")
         {
           num_tol_term = 2;
         }
@@ -1365,7 +1372,7 @@ namespace OpenMS
       fixed_modifications_.clear();
       variable_modifications_.clear();
       params_ = ProteinIdentification::SearchParameters();
-      params_.digestion_enzyme = *(ProteaseDB::getInstance()->getEnzyme(enzyme_));
+      params_.digestion_enzyme.emplace_back(*(ProteaseDB::getInstance()->getEnzyme(enzyme_)));
       String mass_type = attributeAsString_(attributes, "precursor_mass_type");
       if (mass_type == "monoisotopic")
       {
@@ -1425,16 +1432,19 @@ namespace OpenMS
       enzyme_ = attributeAsString_(attributes, "name");
       if (ProteaseDB::getInstance()->hasEnzyme(enzyme_.toLower()))
       {
-        params_.digestion_enzyme = *(ProteaseDB::getInstance()->getEnzyme(enzyme_));
+        params_.digestion_enzyme.emplace_back(*(ProteaseDB::getInstance()->getEnzyme(enzyme_)));
       }
     }
     else if (element == "enzymatic_search_constraint") // parent: "search_summary"
     {
+      //TODO support storing terminus specificity in our search settings data structures
+      // not sure where to parse it from though. There is:
+      // sample_enzyme:fidelty and enzymatic_search_constraint:min_number_termini. I would go for the latter.
       ///<enzymatic_search_constraint enzyme="nonspecific" max_num_internal_cleavages="1" min_number_termini="2"/>
       enzyme_ = attributeAsString_(attributes, "enzyme");
       if (ProteaseDB::getInstance()->hasEnzyme(enzyme_))
       {
-        params_.digestion_enzyme = *(ProteaseDB::getInstance()->getEnzyme(enzyme_.toLower()));
+        params_.digestion_enzyme.emplace_back(*(ProteaseDB::getInstance()->getEnzyme(enzyme_.toLower())));
       }
 
       int mc = attributeAsInt_(attributes, "max_num_internal_cleavages");

@@ -56,13 +56,11 @@ namespace OpenMS
     name_(name),
     cleavage_regex_(cleavage_regex),
     synonyms_(synonyms),
-    regex_description_(regex_description)
+    regex_description_(std::move(regex_description))
   {
   }
 
-  DigestionEnzyme::~DigestionEnzyme()
-  {
-  }
+  DigestionEnzyme::~DigestionEnzyme() = default;
 
   void DigestionEnzyme::setName(const String& name)
   {

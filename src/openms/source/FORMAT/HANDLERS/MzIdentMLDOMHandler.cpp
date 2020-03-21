@@ -1040,6 +1040,8 @@ namespace OpenMS
                 {
                   OPENMS_LOG_WARN << "Search engine enzyme settings for 'missedCleavages' unreadable: " << e.what()  << String(XMLString::transcode(enzyme->getAttribute(XMLString::transcode("missedCleavages")))) << endl;
                 }
+                // TODO since we currently do not support different number of missed cleavages, this will always take
+                // the last entry. We could check for matching and warn though.
                 sp.missed_cleavages = missedCleavages;
 
 //                String semiSpecific = XMLString::transcode(enzyme->getAttribute(XMLString::transcode("semiSpecific"))); //xsd:boolean
@@ -1080,7 +1082,7 @@ namespace OpenMS
                 }
                 if (ProteaseDB::getInstance()->hasEnzyme(enzymename))
                 {
-                  sp.digestion_enzyme = *(ProteaseDB::getInstance()->getEnzyme(enzymename));
+                  sp.digestion_enzyme.emplace_back(*(ProteaseDB::getInstance()->getEnzyme(enzymename)));
                 }
                 enzyme = enzyme->getNextElementSibling();
               }

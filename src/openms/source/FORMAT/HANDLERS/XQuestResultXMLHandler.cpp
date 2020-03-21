@@ -257,13 +257,18 @@ namespace OpenMS
 
         //cout << "Parse Enzyme" << endl;
         // General
+        // TODO support multiple enzymes if XQuest xml supports it
         if (this->is_openpepxl_) // Enzyme via name
         {
-          search_params.digestion_enzyme = dynamic_cast<const DigestionEnzymeProtein&>(*this->enzymes_db_->getEnzyme(this->attributeAsString_(attributes, "enzyme_name")));
+          search_params.digestion_enzyme =
+              {dynamic_cast<const DigestionEnzymeProtein&>
+               (*this->enzymes_db_->getEnzyme(this->attributeAsString_(attributes, "enzyme_name")))};
         }
         else // Enzyme via enzyme number in xQuest
         {
-          search_params.digestion_enzyme = dynamic_cast<const DigestionEnzymeProtein&>(*this->enzymes_db_->getEnzyme(XQuestResultXMLHandler::enzymes[this->attributeAsInt_(attributes, "enzyme_num")]));
+          search_params.digestion_enzyme =
+              {dynamic_cast<const DigestionEnzymeProtein&>
+               (*this->enzymes_db_->getEnzyme(XQuestResultXMLHandler::enzymes[this->attributeAsInt_(attributes, "enzyme_num")]))};
         }
 
         //cout << "Parse shitpile 1" << endl;
@@ -948,7 +953,8 @@ namespace OpenMS
 
       String in_fasta = search_params.db;
       String in_decoy_fasta = search_params.getMetaValue("input_decoys");
-      String enzyme_name = search_params.digestion_enzyme.getName();
+      //TODO support multiple enzymes if possible
+      String enzyme_name = search_params.digestion_enzyme[0].getName();
       int missed_cleavages = search_params.missed_cleavages;
 
       StringList variable_mod_list = search_params.variable_modifications;

@@ -484,7 +484,7 @@ namespace OpenMS
         String temp_string = (character_buffer_.trim());
         if (ProteaseDB::getInstance()->hasEnzyme(temp_string))
         {
-          search_parameters_.digestion_enzyme = *(ProteaseDB::getInstance()->getEnzyme(temp_string));
+          search_parameters_.digestion_enzyme = {*(ProteaseDB::getInstance()->getEnzyme(temp_string))};
         }
       }
       else if (tag_ == "TOL")

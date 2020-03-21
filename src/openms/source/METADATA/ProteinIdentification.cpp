@@ -123,7 +123,7 @@ namespace OpenMS
     fragment_mass_tolerance_ppm(false),
     precursor_mass_tolerance(0.0),
     precursor_mass_tolerance_ppm(false),
-    digestion_enzyme("unknown_enzyme", "")
+    digestion_enzyme({Protease{"unknown_enzyme", ""}})
   {
   }
 

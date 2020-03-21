@@ -310,7 +310,8 @@ void SimpleSearchEngineAlgorithm::postProcessHits_(const PeakMap& exp,
     search_parameters.precursor_mass_tolerance = precursor_mass_tolerance;
     search_parameters.precursor_mass_tolerance_ppm = precursor_mass_tolerance_unit_ppm == "ppm";
     search_parameters.fragment_mass_tolerance_ppm = fragment_mass_tolerance_unit_ppm == "ppm";
-    search_parameters.digestion_enzyme = *ProteaseDB::getInstance()->getEnzyme(enzyme);
+    //TODO support multiple enzymes
+    search_parameters.digestion_enzyme.emplace_back(*ProteaseDB::getInstance()->getEnzyme(enzyme));
     protein_ids[0].setSearchParameters(std::move(search_parameters));
   }
 

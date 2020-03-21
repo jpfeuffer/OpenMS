@@ -1005,27 +1005,30 @@ namespace OpenMS
       }
     }
 
-    void MzIdentMLHandler::writeEnzyme_(String& s, DigestionEnzymeProtein enzy, UInt miss, UInt indent) const
+    void MzIdentMLHandler::writeEnzyme_(String& s, const vector<DigestionEnzymeProtein>& enzy, UInt miss, UInt indent) const
     {
       String cv_ns = cv_.name();
-      s += String(indent, '\t') + "<Enzymes independent=\"false\">\n";
-      s += String(indent + 1, '\t') + "<Enzyme missedCleavages=\"" + String(miss) + "\" id=\"" + String("ENZ_") + String(UniqueIdGenerator::getUniqueId()) + "\">\n";
-      s += String(indent + 2, '\t') + "<EnzymeName>\n";
-      String enzymename = enzy.getName();
-      if (cv_.hasTermWithName(enzymename))
+      s += String(indent, '\t') + "<Enzymes independent=\"true\">\n";
+      for (const auto& enz : enzy)
       {
-        s += String(indent + 3, '\t') + cv_.getTermByName(enzymename).toXMLString(cv_ns) + "\n";
+        s += String(indent + 1, '\t') + "<Enzyme missedCleavages=\"" + String(miss) + "\" id=\"" + String("ENZ_") + String(UniqueIdGenerator::getUniqueId()) + "\">\n";
+        s += String(indent + 2, '\t') + "<EnzymeName>\n";
+        String enzymename = enz.getName();
+        if (cv_.hasTermWithName(enzymename))
+        {
+          s += String(indent + 3, '\t') + cv_.getTermByName(enzymename).toXMLString(cv_ns) + "\n";
+        }
+        else if (enzymename == "no cleavage")
+          {
+            s += String(indent + 3, '\t') + cv_.getTermByName("NoEnzyme").toXMLString(cv_ns) + "\n";
+          }
+          else
+          {
+            s += String(indent + 3, '\t') + cv_.getTermByName("cleavage agent details").toXMLString(cv_ns) + "\n";
+          }
+        s += String(indent + 2, '\t') + "</EnzymeName>\n";
+        s += String(indent + 1, '\t') + "</Enzyme>\n";
       }
-      else if (enzymename == "no cleavage")
-      {
-        s += String(indent + 3, '\t') + cv_.getTermByName("NoEnzyme").toXMLString(cv_ns) + "\n";
-      }
-      else
-      {
-        s += String(indent + 3, '\t') + cv_.getTermByName("cleavage agent details").toXMLString(cv_ns) + "\n";
-      }
-      s += String(indent + 2, '\t') + "</EnzymeName>\n";
-      s += String(indent + 1, '\t') + "</Enzyme>\n";
       s += String(indent, '\t') + "</Enzymes>\n";
     }
 

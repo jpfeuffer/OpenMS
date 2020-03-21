@@ -1944,7 +1944,13 @@ namespace OpenMS
         sesoftwaremd.setting[5] = MzTabString("fragment_mass_tolerance_unit:" + String(sp.fragment_mass_tolerance_ppm ? "ppm" : "Da"));
         sesoftwaremd.setting[6] = MzTabString("precursor_mass_tolerance:"+String(sp.precursor_mass_tolerance));
         sesoftwaremd.setting[7] = MzTabString("precursor_mass_tolerance_unit:" + String(sp.precursor_mass_tolerance_ppm ? "ppm" : "Da"));
-        sesoftwaremd.setting[8] = MzTabString(String("enzyme:") + sp.digestion_enzyme.getName());
+        auto enzs = String("enzymes:");
+        for (const auto& enz : sp.digestion_enzyme)
+        {
+           enzs + enz.getName() + ",";
+        }
+        enzs.pop_back();
+        sesoftwaremd.setting[8] = MzTabString(enzs);
         meta_data.software[1] = sesoftwaremd;
       }
 

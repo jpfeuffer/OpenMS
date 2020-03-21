@@ -209,9 +209,12 @@ public:
       //---------------------------------------------------------------
       // parsing parameters, correcting xtandem and MSGFPlus parameters
       //---------------------------------------------------------------
-      ProteaseDigestion enzyme;
-      enzyme.setEnzyme(enzyme_name_);
-      enzyme.setSpecificity(enzyme.getSpecificityByName(enzyme_specificity_));
+      std::vector<ProteaseDigestion> enzymes(enzyme_names_.size());
+      for (Size i = 0; i < enzyme_names_.size(); ++i)
+      {
+        enzymes[i].setEnzyme(enzyme_names_[i]);
+        enzymes[i].setSpecificity(enzymes[i].getSpecificityByName(enzyme_specificity_));
+      }
 
       bool xtandem_fix_parameters = true;
       bool msgfplus_fix_parameters = true;
@@ -226,11 +229,15 @@ public:
       }
 
       // solely MSGFPlus -> Trypsin/P as enzyme
-      if (msgfplus_fix_parameters && enzyme.getEnzymeName() == "Trypsin")
+      for (auto& enz : enzymes)
       {
-        OPENMS_LOG_WARN << "MSGFPlus detected but enzyme cutting rules were set to Trypsin. Correcting to Trypsin/P to copy with special cutting rule in MSGFPlus." << std::endl;
-        enzyme.setEnzyme("Trypsin/P");
+        if (msgfplus_fix_parameters && enz.getEnzymeName() == "Trypsin")
+        {
+          OPENMS_LOG_WARN << "MSGFPlus detected but enzyme cutting rules were set to Trypsin. Correcting to Trypsin/P to copy with special cutting rule in MSGFPlus." << std::endl;
+          enz.setEnzyme("Trypsin/P");
+        }
       }
+
 
       //-------------------------------------------------------------
       // calculations
@@ -263,7 +270,7 @@ public:
         return PEPTIDE_IDS_EMPTY;
       }
 
-      FoundProteinFunctor func(enzyme, xtandem_fix_parameters); // store the matches
+      FoundProteinFunctor func(enzymes, xtandem_fix_parameters); // store the matches
       Map<String, Size> acc_to_prot; // map: accessions --> FASTA protein index
       std::vector<bool> protein_is_decoy; // protein index -> is decoy?
       std::vector<std::string> protein_accessions; // protein index -> accession
@@ -338,7 +345,7 @@ public:
 #pragma omp parallel
 #endif
         {
-          FoundProteinFunctor func_threads(enzyme, xtandem_fix_parameters);
+          FoundProteinFunctor func_threads(enzymes, xtandem_fix_parameters);
           Map<String, Size> acc_to_prot_thread; // map: accessions --> FASTA protein index
           AhoCorasickAmbiguous fuzzyAC;
           String prot;
@@ -759,12 +766,12 @@ public:
       OpenMS::Size filter_rejected; //< number of rejected hits (not passing addHit())
 
     private:
-      ProteaseDigestion enzyme_;
+      std::vector<ProteaseDigestion> enzymes_;
       bool xtandem_; //< are we checking xtandem cleavage rules?
 
     public:
-      explicit FoundProteinFunctor(const ProteaseDigestion& enzyme, bool xtandem) :
-        pep_to_prot(), filter_passed(0), filter_rejected(0), enzyme_(enzyme), xtandem_(xtandem)
+      explicit FoundProteinFunctor(const std::vector<ProteaseDigestion>& enzymes, bool xtandem) :
+        pep_to_prot(), filter_passed(0), filter_rejected(0), enzymes_(enzymes), xtandem_(xtandem)
       {
       }
 
@@ -795,24 +802,26 @@ public:
         const OpenMS::String& seq_prot,
         OpenMS::Int position)
       {
-        if (enzyme_.isValidProduct(seq_prot, position, len_pep, true, true, xtandem_))
+        for (const auto& enz : enzymes_)
         {
-          PeptideProteinMatchInformation match;
-          match.protein_index = idx_prot;
-          match.position = position;
-          match.AABefore = (position == 0) ? PeptideEvidence::N_TERMINAL_AA : seq_prot[position - 1];
-          match.AAAfter = (position + len_pep >= seq_prot.size()) ? PeptideEvidence::C_TERMINAL_AA : seq_prot[position + len_pep];
-          pep_to_prot[idx_pep].insert(match);
-          ++filter_passed;
-        }
-        else
-        {
-          //std::cerr << "REJECTED Peptide " << seq_pep << " with hit to protein "
-          //  << seq_prot << " at position " << position << std::endl;
-          ++filter_rejected;
+          if (enz.isValidProduct(seq_prot, position, len_pep, true, true, xtandem_))
+          {
+            PeptideProteinMatchInformation match;
+            match.protein_index = idx_prot;
+            match.position = position;
+            match.AABefore = (position == 0) ? PeptideEvidence::N_TERMINAL_AA : seq_prot[position - 1];
+            match.AAAfter = (position + len_pep >= seq_prot.size()) ? PeptideEvidence::C_TERMINAL_AA : seq_prot[position + len_pep];
+            pep_to_prot[idx_pep].insert(match);
+            ++filter_passed;
+          }
+          else
+          {
+            //std::cerr << "REJECTED Peptide " << seq_pep << " with hit to protein "
+            //  << seq_prot << " at position " << position << std::endl;
+            ++filter_rejected;
+          }
         }
       }
-
     };
 
     inline void addHits_(AhoCorasickAmbiguous& fuzzyAC, const AhoCorasickAmbiguous::FuzzyACPattern& pattern, const AhoCorasickAmbiguous::PeptideDB& pep_DB, const String& prot, const String& full_prot, SignedSize idx_prot, Int offset, FoundProteinFunctor& func_threads) const
@@ -830,7 +839,7 @@ public:
     String decoy_string_;
     bool prefix_;
     String missing_decoy_action_;
-    String enzyme_name_;
+    StringList enzyme_names_;
     String enzyme_specificity_;
 
     bool write_protein_sequence_;

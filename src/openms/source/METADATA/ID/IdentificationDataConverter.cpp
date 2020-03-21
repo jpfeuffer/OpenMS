@@ -893,7 +893,8 @@ namespace OpenMS
     dbsp.fragment_mass_tolerance = pisp.fragment_mass_tolerance;
     dbsp.precursor_tolerance_ppm = pisp.precursor_mass_tolerance_ppm;
     dbsp.fragment_tolerance_ppm = pisp.fragment_mass_tolerance_ppm;
-    const String& enzyme_name = pisp.digestion_enzyme.getName();
+    //TODO support multiple enzymes!
+    const String& enzyme_name = pisp.digestion_enzyme[0].getName();
     if (ProteaseDB::getInstance()->hasEnzyme(enzyme_name))
     {
       dbsp.digestion_enzyme = ProteaseDB::getInstance()->getEnzyme(enzyme_name);
@@ -930,11 +931,11 @@ namespace OpenMS
         (dbsp.molecule_type == IdentificationData::MoleculeType::PROTEIN))
     {
       pisp.digestion_enzyme =
-        *(static_cast<const DigestionEnzymeProtein*>(dbsp.digestion_enzyme));
+          {*(static_cast<const DigestionEnzymeProtein*>(dbsp.digestion_enzyme))};
     }
     else
     {
-      pisp.digestion_enzyme = DigestionEnzymeProtein("unknown_enzyme", "");
+      pisp.digestion_enzyme = {DigestionEnzymeProtein("unknown_enzyme", "")};
     }
     pisp.missed_cleavages = dbsp.missed_cleavages;
     static_cast<MetaInfoInterface&>(pisp) = dbsp;

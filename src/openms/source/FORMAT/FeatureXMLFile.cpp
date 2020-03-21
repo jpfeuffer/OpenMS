@@ -232,9 +232,10 @@ namespace OpenMS
         os << "mass_type=\"average\" ";
       }
       os << "charges=\"" << search_param.charges << "\" ";
-      String enzyme_name = search_param.digestion_enzyme.getName();
-      os << "enzyme=\"" << enzyme_name.toLower() << "\" ";
-
+      os << "enzyme=\"";
+      for (const auto& enz : search_param.digestion_enzyme)
+        os << enz.getName().toLower() << ","; //TODO get rid of trailing comma
+      os << "\" ";
       String precursor_unit = search_param.precursor_mass_tolerance_ppm ? "true" : "false";
       String peak_unit = search_param.fragment_mass_tolerance_ppm ? "true" : "false";
 
@@ -573,11 +574,13 @@ namespace OpenMS
         search_param_.mass_type = ProteinIdentification::AVERAGE;
       }
       //enzyme
-      String enzyme;
-      optionalAttributeAsString_(enzyme, attributes, "enzyme");
-      if (ProteaseDB::getInstance()->hasEnzyme(enzyme))
+      StringList enzymes = attributeAsStringList_(attributes, "enzyme");
+      for (const auto& enz : enzymes)
       {
-        search_param_.digestion_enzyme = *(ProteaseDB::getInstance()->getEnzyme(enzyme));
+        if (ProteaseDB::getInstance()->hasEnzyme(enz))
+        {
+          search_param_.digestion_enzyme.emplace_back(*(ProteaseDB::getInstance()->getEnzyme(enz)));
+        }
       }
       last_meta_ = &search_param_;
     }

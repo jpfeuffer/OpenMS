@@ -322,7 +322,8 @@ using namespace OpenMS;
       searched_charges += "," + String(ch);
     }
     search_params.charges = searched_charges;
-    search_params.digestion_enzyme = *(ProteaseDB::getInstance()->getEnzyme(enzyme_name_));
+    //TODO support multiple enzymes
+    search_params.digestion_enzyme.emplace_back(*(ProteaseDB::getInstance()->getEnzyme(enzyme_name_)));
     search_params.fixed_modifications = fixedModNames_;
     search_params.variable_modifications = varModNames_;
     search_params.mass_type = ProteinIdentification::MONOISOTOPIC;

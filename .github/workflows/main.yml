@@ -40,7 +40,7 @@ jobs:
           rm contribbld.tar.gz
     
     - name: Install Qt
-      run: sudo apt-get install -y qt5base5-dev
+      run: sudo apt-get install -y qt5base-dev
     
     - name: configure
       run: |

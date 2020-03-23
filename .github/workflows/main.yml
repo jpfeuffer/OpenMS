@@ -40,12 +40,12 @@ jobs:
           rm contribbld.tar.gz
     
     - name: Install Qt
-      run: apt-get install -y qt5base5-dev
+      run: sudo apt-get install -y qt5base5-dev
     
     - name: configure
       run: |
           mkdir build && cd build
-          cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DOPENMS_CONTRIB_LIBS=${GITHUB_WORKSPACE}/contribbld .
+          cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DWITH_GUI=OFF -DOPENMS_CONTRIB_LIBS=${GITHUB_WORKSPACE}/contribbld .
 
     - name: Run Include What You Use
       uses: EmilGedda/include-what-you-use-action@v1.0

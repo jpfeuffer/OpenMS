@@ -20,16 +20,24 @@ jobs:
     # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
     - uses: actions/checkout@v2
 
-    - name: Download artifact
-      uses: dawidd6/action-download-artifact@master
-      with:
-        github_token: ${{secrets.GITHUB_TOKEN}}
-        owner: OpenMS
-        repo: contrib
-        commit: f6d6774a8beec5014702f31763f058ff2d59c242
-        workflow: main.yml
-        name: contrib-build-${{ runner.os }}
-        path: contrib_build
+    #- name: Download artifact
+    #  uses: dawidd6/action-download-artifact@master
+    #  with:
+    #    github_token: ${{secrets.GITHUB_TOKEN}}
+    #    owner: OpenMS
+    #    repo: contrib
+    #    commit: f6d6774a8beec5014702f31763f058ff2d59c242
+    #    workflow: main.yml
+    #    name: contrib-build-${{ runner.os }}
+    #    path: contrib_build
+        
+    - name: Load contrib build
+      run: |
+          mkdir contribbld
+          cd contribbld
+          curl -o contribbld.tar.gz https://abibuilder.informatik.uni-tuebingen.de/archive/openms/contrib/linux/debian/ubuntu/18.04/x64/g%2B%2B-7/contrib_build.tar.gz
+          tar -xzf contribbld.tar.gz
+          rm contribbld.tar.gz
     
     - name: Install Qt
       run: apt-get install -y qt5base5-dev
@@ -37,7 +45,7 @@ jobs:
     - name: configure
       run: |
           mkdir build && cd build
-          cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DOPENMS_CONTRIB_LIBS=${GITHUB_WORKSPACE}/contrib_build .
+          cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DOPENMS_CONTRIB_LIBS=${GITHUB_WORKSPACE}/contribbld .
 
     - name: Run Include What You Use
       uses: EmilGedda/include-what-you-use-action@v1.0

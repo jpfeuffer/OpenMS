@@ -26,6 +26,7 @@ jobs:
         github_token: ${{secrets.GITHUB_TOKEN}}
         owner: OpenMS
         repo: contrib
+        commit: f6d6774a8beec5014702f31763f058ff2d59c242
         workflow: main.yml
         name: contrib-build-${{ runner.os }}
         path: contrib_build

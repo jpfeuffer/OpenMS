@@ -45,7 +45,7 @@ jobs:
     - name: configure
       run: |
           mkdir build && cd build
-          cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DWITH_GUI=OFF -DOPENMS_CONTRIB_LIBS=${GITHUB_WORKSPACE}/contribbld .
+          cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DWITH_GUI=OFF -DOPENMS_CONTRIB_LIBS=${GITHUB_WORKSPACE}/contribbld ../
 
     - name: Run Include What You Use
       uses: EmilGedda/include-what-you-use-action@v1.0

@@ -67,6 +67,7 @@ set(datastructures_executables_list
   MatchedIterator_test
   Matrix_test
   #MatrixUtils_test
+  MZIndex_test
   OPXLDataStructs_test
   Param_test
   ParamValue_test

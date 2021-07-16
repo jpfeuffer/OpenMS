@@ -142,6 +142,12 @@ public:
       intensity_(in)
     {}
 
+    /// Member constructor
+    explicit Peak2D(const CoordinateType& rt, const CoordinateType& mz, const IntensityType in) :
+        position_(rt, mz),
+        intensity_(in)
+    {}
+
     /// Copy constructor
     Peak2D(const Peak2D & p) = default;
 

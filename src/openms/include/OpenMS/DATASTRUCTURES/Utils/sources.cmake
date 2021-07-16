@@ -5,6 +5,7 @@ set(directory include/OpenMS/DATASTRUCTURES/Utils)
 set(sources_list_h
 MatrixUtils.h
 MapUtilities.h
+MZindex.h
 )
 
 ### add path to the filenames

@@ -35,6 +35,7 @@ Map.cpp
 MassExplainer.cpp
 MatchedIterator.cpp
 Matrix.cpp
+MZIndex.cpp
 OSWData.cpp
 Param.cpp
 ParamValue.cpp

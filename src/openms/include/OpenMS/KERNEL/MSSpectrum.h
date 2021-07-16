@@ -368,6 +368,7 @@ public:
       @exception Exception::Precondition is thrown if the spectrum is empty (not only in debug mode)
     */
     Size findNearest(CoordinateType mz) const;
+    Size findNearestInRange(CoordinateType mz, Size startIdx, Size endIdx) const;
 
     /**
       @brief Binary search for the peak nearest to a specific m/z given a +/- tolerance windows in Th

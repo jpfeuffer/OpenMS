@@ -35,8 +35,13 @@
 #include <OpenMS/FILTERING/DATAREDUCTION/MassTraceDetection.h>
 
 #include <OpenMS/MATH/STATISTICS/StatisticFunctions.h>
+#include <OpenMS/DATASTRUCTURES/Utils/MZIndex.h>
 
 #include <boost/dynamic_bitset.hpp>
+
+#ifdef _OPENMP
+  #include <omp.h>
+#endif
 
 namespace OpenMS
 {
@@ -260,6 +265,7 @@ namespace OpenMS
       // Step 2: start extending mass traces beginning with the apex peak (go
       // through all peaks in order of decreasing intensity)
       // *********************************************************************
+      work_exp.updateRanges(1);
       run_(chrom_apices, total_peak_count, work_exp, spec_offsets, found_masstraces, max_traces);
 
       return;
@@ -280,7 +286,7 @@ namespace OpenMS
       Size fwhm_meta_count(0);
       for (Size i = 0; i < work_exp.size(); ++i)
       {
-        if (work_exp[i].getFloatDataArrays().size() > 0 &&
+        if (!work_exp[i].getFloatDataArrays().empty() &&
             work_exp[i].getFloatDataArrays()[0].getName() == "FWHM_ppm")
         {
           if (work_exp[i].getFloatDataArrays()[0].size() != work_exp[i].size())
@@ -297,10 +303,22 @@ namespace OpenMS
                                       String("FWHM meta arrays are expected to be missing or present for all MS spectra [") + fwhm_meta_count + "/" + work_exp.size() + "].");
       }
 
+      //OPENMS_LOG_INFO << "Creating index..." << std::endl;
+      //MzIndex mzidx(work_exp, 10000);
 
-      this->startProgress(0, total_peak_count, "mass trace detection");
+      if (max_traces > 0)
+      {
+        // this is a guess, that at least every 10th apex leads to a trace.
+        this->startProgress(0, std::min(total_peak_count, max_traces*10), "mass trace detection");
+      }
+      else
+      {
+        this->startProgress(0, total_peak_count, "mass trace detection");
+      }
+
       Size peaks_detected(0);
-
+      Size apices_done(0);
+      //#pragma omp parallel for
       for (auto m_it = chrom_apices.crbegin(); m_it != chrom_apices.crend(); ++m_it)
       {
         Size apex_scan_idx(m_it->scan_idx);
@@ -308,6 +326,7 @@ namespace OpenMS
 
         if (peak_visited[spec_offsets[apex_scan_idx] + apex_peak_idx])
         {
+          this->setProgress(++apices_done);
           continue;
         }
 
@@ -319,8 +338,10 @@ namespace OpenMS
         Size trace_up_idx(apex_scan_idx);
         Size trace_down_idx(apex_scan_idx);
 
-        std::list<PeakType> current_trace;
-        current_trace.push_back(apex_peak);
+        //TODO we could reserve memory: max. mass trace length / avg. RT spacing
+        std::deque<PeakType> current_trace;
+        //TODO construct during emplace? And reference the peak there?
+        current_trace.emplace_back(apex_peak);
         std::vector<double> fwhms_mz; // peak-FWHM meta values of collected peaks
 
         // Initialization for the iterative version of weighted m/z mean calculation
@@ -368,6 +389,7 @@ namespace OpenMS
             if (!spec_trace_down.empty())
             {
               Size next_down_peak_idx = spec_trace_down.findNearest(centroid_mz);
+              //Size next_down_peak_idx = mzidx.findNearest(trace_down_idx - 1, centroid_mz);
               double next_down_peak_mz = spec_trace_down[next_down_peak_idx].getMZ();
               double next_down_peak_int = spec_trace_down[next_down_peak_idx].getIntensity();
 
@@ -446,6 +468,7 @@ namespace OpenMS
             if (!spec_trace_up.empty())
             {
               Size next_up_peak_idx = spec_trace_up.findNearest(centroid_mz);
+              //Size next_up_peak_idx = mzidx.findNearest(trace_up_idx + 1, centroid_mz);
               double next_up_peak_mz = spec_trace_up[next_up_peak_idx].getMZ();
               double next_up_peak_int = spec_trace_up[next_up_peak_idx].getIntensity();
 
@@ -456,12 +479,7 @@ namespace OpenMS
                   (next_up_peak_mz >= left_bound) &&
                   !peak_visited[spec_offsets[trace_up_idx + 1] + next_up_peak_idx])
               {
-                Peak2D next_peak;
-                next_peak.setRT(spec_trace_up.getRT());
-                next_peak.setMZ(next_up_peak_mz);
-                next_peak.setIntensity(next_up_peak_int);
-
-                current_trace.push_back(next_peak);
+                current_trace.emplace_back(spec_trace_up.getRT(), next_up_peak_mz, next_up_peak_int);
                 if (fwhm_meta_idx != -1)
                 {
                   fwhms_mz.push_back(spec_trace_up.getFloatDataArrays()[fwhm_meta_idx][next_up_peak_idx]);
@@ -475,7 +493,7 @@ namespace OpenMS
                 {
                   // if (ftl_t > min_fwhm_scans)
                   {
-                    updateWeightedSDEstimateRobust(next_peak, centroid_mz, ftl_sd, intensity_so_far);
+                    updateWeightedSDEstimateRobust(current_trace.back(), centroid_mz, ftl_sd, intensity_so_far);
                   }
                 }
 
@@ -510,8 +528,6 @@ namespace OpenMS
                 toggle_up = false;
               }
             }
-
-
           }
 
         }
@@ -532,13 +548,17 @@ namespace OpenMS
           // std::cout << "T" << trace_number << "\t" << mt_quality << std::endl;
 
           // mark all peaks as visited
+          //#pragma omp critical(bitmask)
           for (Size i = 0; i < gathered_idx.size(); ++i)
           {
-            peak_visited[spec_offsets[gathered_idx[i].first] +  gathered_idx[i].second] = true;
+            peak_visited[spec_offsets[gathered_idx[i].first] + gathered_idx[i].second] = true;
           }
 
           // create new MassTrace object and store collected peaks from list current_trace
-          MassTrace new_trace(current_trace);
+          MassTrace new_trace(std::move(current_trace));
+
+          // TODO is this really necessary, doesnt the algorithm update it every time it adds a Peak?
+          //  Cant we just use the last value?
           new_trace.updateWeightedMeanRT();
           new_trace.updateWeightedMeanMZ();
           if (!fwhms_mz.empty()) new_trace.fwhm_mz_avg = Math::median(fwhms_mz.begin(), fwhms_mz.end());
@@ -548,14 +568,17 @@ namespace OpenMS
           new_trace.setLabel("T" + String(trace_number));
           ++trace_number;
 
+          //#pragma omp critical(tracevec)
           found_masstraces.push_back(new_trace);
 
           peaks_detected += new_trace.getSize();
-          this->setProgress(peaks_detected);
+          //TODO what does the number of assembled peaks have to do with the progress of the algorithm??
+          //this->setProgress(peaks_detected);
 
           // check if we already reached the (optional) maximum number of traces
-          if (max_traces > 0 && found_masstraces.size() == max_traces) break;
+          //if (max_traces > 0 && found_masstraces.size() == max_traces) break;
         }
+        this->setProgress(++apices_done);
       }
 
       this->endProgress();

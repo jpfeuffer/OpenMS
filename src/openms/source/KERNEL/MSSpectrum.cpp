@@ -305,6 +305,33 @@ namespace OpenMS
     }
   }
 
+  Size MSSpectrum::findNearestInRange(MSSpectrum::CoordinateType mz, Size startIdx, Size endIdx) const
+  {
+    //std::cout << "searching in: " << String(endIdx - startIdx) << " peaks" << std::endl;
+    // no peak => no search
+    if (ContainerType::size() == 0) throw Exception::Precondition(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION, "There must be at least one peak to determine the nearest peak!");
+
+    const auto begin = ContainerType::begin();
+    // search for position for inserting
+    ConstIterator it = MZBegin(begin + startIdx, mz, begin + endIdx);
+    // border cases
+    if (it == begin) return 0;
+
+    if (it == ContainerType::end()) return ContainerType::size() - 1;
+
+    // the peak before or the current peak are closest
+    ConstIterator it2 = it;
+    --it2;
+    if (std::fabs(it->getMZ() - mz) < std::fabs(it2->getMZ() - mz))
+    {
+      return Size(it - begin);
+    }
+    else
+    {
+      return Size(it2 - begin);
+    }
+  }
+
   Int MSSpectrum::findHighestInWindow(MSSpectrum::CoordinateType mz, MSSpectrum::CoordinateType tolerance_left,
                               MSSpectrum::CoordinateType tolerance_right) const
   {

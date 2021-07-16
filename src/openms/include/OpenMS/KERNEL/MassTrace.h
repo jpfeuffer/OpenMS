@@ -82,8 +82,9 @@ public:
     MassTrace() = default;
 
     /// Detailed constructor 
-    /// (useful, since Mass Traces are commonly assembled by prepending and appending -- which is faster using lists)
-    MassTrace(const std::list<PeakType>& trace_peaks);
+    /// (useful, since Mass Traces are commonly assembled by prepending and appending -- which is faster using deques)
+    MassTrace(const std::deque<PeakType>& trace_peaks);
+    MassTrace(std::deque<PeakType>&& trace_peaks);
 
     /// Detailed constructor for vector
     MassTrace(const std::vector<PeakType>& trace_peaks);
@@ -329,6 +330,7 @@ private:
     double linearInterpolationAtY_(double xA, double xB, double yA, double yB, double y_eval) const;
 
     /// Actual MassTrace container for doing centroid calculation, peak width estimation etc.
+    //TODO maybe could also be a deque
     std::vector<PeakType> trace_peaks_;
 
     /// Centroid m/z

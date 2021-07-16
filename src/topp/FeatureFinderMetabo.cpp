@@ -305,8 +305,9 @@ protected:
     {
       if (!ffm_param.getValue("remove_single_traces").toBool())
       { 
-        OPENMS_LOG_ERROR << "FF-Metabo: Internal error. Not all mass traces have been assembled to features! Aborting." << std::endl;
-        return UNEXPECTED_RESULT;
+        OPENMS_LOG_WARN << "FF-Metabo: Internal error. Not all mass traces have been assembled to features!" << std::endl;
+        //TODO Why would you abort here??? If something does not pass any criterion than there just wont be a feature.
+        //return UNEXPECTED_RESULT;
       }
       else
       {

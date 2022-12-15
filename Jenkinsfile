@@ -45,6 +45,9 @@ pipeline {
                     }
                     stages {
                         stage("configure") {
+                            dir('OpenMS') {
+                                checkout scm
+                            }
                             steps {
                                 sh '''
                                 mkdir -p bld && cd bld

@@ -41,7 +41,7 @@ pipeline {
 
                 stage("linux") {
                     agent {
-                        label "openms-ci"
+                        label "openms&&ci-ready"
                     }
                     stages {
                         stage("configure") {

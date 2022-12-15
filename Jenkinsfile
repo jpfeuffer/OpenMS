@@ -45,10 +45,11 @@ pipeline {
                     }
                     stages {
                         stage("configure") {
-                            dir('OpenMS') {
-                                checkout scm
-                            }
                             steps {
+                                dir('OpenMS') {
+                                  checkout scm
+                                }
+                              
                                 sh '''
                                 mkdir -p bld && cd bld
                                 cmake -DCMAKE_PREFIX_PATH='/usr/;/usr/local' -DOPENMS_CONTRIB_LIBS="/contrib-build/" -DBOOST_USE_STATIC=OFF -DHAS_XSERVER=Off ../OpenMS

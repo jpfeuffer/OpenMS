@@ -137,6 +137,12 @@ TOPP tools:
       - PARAM: New -out writes the per-file identifications as idXML or as an idparquet bundle
         (format by extension), like CometAdapter and SageAdapter. -out_idxml (idXML only) is
         deprecated; it still works but cannot be combined with -out. -out_merged accepts idparquet.
+    IsobaricWorkflow:
+      - -in also accepts Thermo .raw (if built WITH_THERMO_RAW) and Bruker timsTOF .d (if built
+        WITH_OPENTIMS) runs, read natively like in IsobaricAnalyzer; mzML input is unchanged. The
+        experimental design names the runs with their extension (e.g. run1.raw).
+      - FIX: no longer crashes while printing reporter statistics when a channel has no
+        reporter signal at all.
     IDFileConverter:
       - TSV import: the hits of a line get their rank as score (score type 'rank', lower is
         better) instead of no score.

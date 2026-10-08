@@ -4807,6 +4807,60 @@ add_test("TOPP_ProSE_11_rescore_skip" ${TOPP_BIN_PATH}/ProSE -test
   -rescore
   -out_idxml ${TESTS_TEMP_DIR}/ProSE_11_rescore_skip_out.tmp.idXML)
 set_tests_properties("TOPP_ProSE_11_rescore_skip" PROPERTIES PASS_REGULAR_EXPRESSION "Percolator   : rescored 0 / 1 file")
+# Test 12: idparquet output. -out writes the .idparquet directory bundle (format by extension).
+# The bundle stores PSMs differently from idXML (e.g. no fragment_annotation), so instead of a line
+# diff, the FileInfo summary of the bundle (converted to idXML) must match that of Test 1's idXML.
+add_test("TOPP_ProSE_12_idparquet" ${TOPP_BIN_PATH}/ProSE -test
+  -ini ${DATA_DIR_TOPP}/ProSE_1.ini
+  -in ${DATA_DIR_TOPP}/SimpleSearchEngine_1.mzML
+  -database ${DATA_DIR_TOPP}/SimpleSearchEngine_1.fasta
+  -out ${TESTS_TEMP_DIR}/ProSE_12_out.tmp.idparquet)
+add_test("TOPP_ProSE_12_idparquet_convert" ${TOPP_BIN_PATH}/IDFileConverter -test
+  -in ${TESTS_TEMP_DIR}/ProSE_12_out.tmp.idparquet
+  -out ${TESTS_TEMP_DIR}/ProSE_12_out.tmp.idXML)
+set_tests_properties("TOPP_ProSE_12_idparquet_convert" PROPERTIES DEPENDS "TOPP_ProSE_12_idparquet")
+add_test("TOPP_ProSE_12_idparquet_info" ${TOPP_BIN_PATH}/FileInfo -test
+  -in ${TESTS_TEMP_DIR}/ProSE_12_out.tmp.idXML
+  -out_tsv ${TESTS_TEMP_DIR}/ProSE_12_info.tmp.tsv)
+set_tests_properties("TOPP_ProSE_12_idparquet_info" PROPERTIES DEPENDS "TOPP_ProSE_12_idparquet_convert")
+add_test("TOPP_ProSE_12_idxml_info" ${TOPP_BIN_PATH}/FileInfo -test
+  -in ${TESTS_TEMP_DIR}/ProSE_1_out.tmp.idXML
+  -out_tsv ${TESTS_TEMP_DIR}/ProSE_12_idxml_info.tmp.tsv)
+set_tests_properties("TOPP_ProSE_12_idxml_info" PROPERTIES DEPENDS "TOPP_ProSE_1")
+add_test("TOPP_ProSE_12_idparquet_info_out" ${DIFF}
+  -in1 ${TESTS_TEMP_DIR}/ProSE_12_info.tmp.tsv
+  -in2 ${TESTS_TEMP_DIR}/ProSE_12_idxml_info.tmp.tsv
+  -whitelist "file name")
+set_tests_properties("TOPP_ProSE_12_idparquet_info_out" PROPERTIES DEPENDS "TOPP_ProSE_12_idparquet_info;TOPP_ProSE_12_idxml_info")
+# The merged output can be idparquet as well; same content as the idXML of Test 7.
+add_test("TOPP_ProSE_12_merged_idparquet" ${TOPP_BIN_PATH}/ProSE -test
+  -ini ${DATA_DIR_TOPP}/ProSE_6_fdr.ini
+  -in ${DATA_DIR_TOPP}/THIRDPARTY/DatabaseSuitability_in_spec.mzML
+      ${DATA_DIR_TOPP}/THIRDPARTY/DatabaseSuitability_in_spec.mzML
+  -database ${DATA_DIR_TOPP}/THIRDPARTY/DatabaseSuitability_database.fasta
+  -out ${TESTS_TEMP_DIR}/ProSE_12_merged_a.tmp.idparquet ${TESTS_TEMP_DIR}/ProSE_12_merged_b.tmp.idparquet
+  -out_merged ${TESTS_TEMP_DIR}/ProSE_12_merged.tmp.idparquet)
+add_test("TOPP_ProSE_12_merged_idparquet_convert" ${TOPP_BIN_PATH}/IDFileConverter -test
+  -in ${TESTS_TEMP_DIR}/ProSE_12_merged.tmp.idparquet
+  -out ${TESTS_TEMP_DIR}/ProSE_12_merged.tmp.idXML)
+set_tests_properties("TOPP_ProSE_12_merged_idparquet_convert" PROPERTIES DEPENDS "TOPP_ProSE_12_merged_idparquet")
+add_test("TOPP_ProSE_12_merged_idparquet_info" ${TOPP_BIN_PATH}/FileInfo -test
+  -in ${TESTS_TEMP_DIR}/ProSE_12_merged.tmp.idXML
+  -out_tsv ${TESTS_TEMP_DIR}/ProSE_12_merged_info.tmp.tsv)
+set_tests_properties("TOPP_ProSE_12_merged_idparquet_info" PROPERTIES DEPENDS "TOPP_ProSE_12_merged_idparquet_convert")
+add_test("TOPP_ProSE_12_merged_idparquet_info_out" ${DIFF}
+  -in1 ${TESTS_TEMP_DIR}/ProSE_12_merged_info.tmp.tsv
+  -in2 ${DATA_DIR_TOPP}/ProSE_7_merged_info.tsv
+  -whitelist "file name" "database" "search engine")
+set_tests_properties("TOPP_ProSE_12_merged_idparquet_info_out" PROPERTIES DEPENDS "TOPP_ProSE_12_merged_idparquet_info")
+# -out_idxml is a deprecated alias of -out; giving both is an error.
+add_test("TOPP_ProSE_12_out_and_out_idxml" ${TOPP_BIN_PATH}/ProSE -test
+  -ini ${DATA_DIR_TOPP}/ProSE_1.ini
+  -in ${DATA_DIR_TOPP}/SimpleSearchEngine_1.mzML
+  -database ${DATA_DIR_TOPP}/SimpleSearchEngine_1.fasta
+  -out ${TESTS_TEMP_DIR}/ProSE_12_both_a.tmp.idXML
+  -out_idxml ${TESTS_TEMP_DIR}/ProSE_12_both_b.tmp.idXML)
+set_tests_properties("TOPP_ProSE_12_out_and_out_idxml" PROPERTIES WILL_FAIL 1)
 
 # Bruker .d input integration tests (DDA-PASEF with IM annotation)
 if (WITH_OPENTIMS AND OPENTIMS_DDA_TEST_DATA)

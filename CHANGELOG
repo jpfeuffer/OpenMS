@@ -21,6 +21,9 @@ OpenMS Library:
     (.pin) feature set: it stamps the PIN features, trains, transfers q-value/PEP/SVM score into
     the main score and the PSI-MS meta values, and removes the stamped features again. It is the
     in-process backend of PercolatorAdapter, moved out of the tool so other tools (ProSE) can use it.
+  - FIX: ThermoRawFile (native Thermo .raw reader) opens files given through a symbolic link, as
+    staged by Nextflow and Galaxy. Thermo's RawFileReader failed on them ("Could not open RAW file");
+    the resolved path is opened now, while the source file keeps the given name (#10451).
   - OpenSWATH (MRMFeatureFinderScoring) and AccurateMassSearchEngine record the score type of the
     peptide identifications they write: xx_lda_prelim_score (or xx_swath_prelim_score,
     OverallQuality; higher is better) and MassErrorAbsPPMScore (lower is better). AccurateMassSearch

@@ -24,6 +24,8 @@ OpenMS Library:
   - FIX: ThermoRawFile (native Thermo .raw reader) opens files given through a symbolic link, as
     staged by Nextflow and Galaxy. Thermo's RawFileReader failed on them ("Could not open RAW file");
     the resolved path is opened now, while the source file keeps the given name (#10451).
+  - FIX: PeptideAndProteinQuant (ProteinQuantifier, IsobaricWorkflow) reported file/channel-level
+    protein abundances of 0 for run files whose name stem contains a dot (e.g. sample.v1.mzML).
   - OpenSWATH (MRMFeatureFinderScoring) and AccurateMassSearchEngine record the score type of the
     peptide identifications they write: xx_lda_prelim_score (or xx_swath_prelim_score,
     OverallQuality; higher is better) and MassErrorAbsPPMScore (lower is better). AccurateMassSearch

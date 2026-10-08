@@ -8,6 +8,20 @@ ARG INSTALL_DIR="/opt/OpenMS"
 ARG THIRDPARTY_DIR="/opt/OpenMS/thirdparty"
 ARG NUM_BUILD_CORES=8
 ARG MAKEFLAGS="-j${NUM_BUILD_CORES}"
+# ONNX Runtime (MIT) for the PeptDeep prediction models (WITH_ONNX=ON). Prebuilt
+# Microsoft release, pinned by version and SHA256 per architecture.
+ARG ONNXRUNTIME_VERSION=1.30.0
+ARG ONNXRUNTIME_SHA256_AMD64=a5ed5a3cac51fbb2e90da632ae43d19212faaa20e76484e62bcb7c23ddb3b3fd
+ARG ONNXRUNTIME_SHA256_ARM64=e16a27a8ed330bbc698df7330b0cf56e722f354e3bcc92118682c74ef3c3e3da
+ARG ONNXRUNTIME_DIR="/opt/onnxruntime"
+# Bruker TDF-SDK (libtimsdata.so, x86-64 Linux only) for exact m/z and 1/K0 when
+# reading Bruker timsTOF .d. Taken from the opentims_bruker_bridge sdist on PyPI,
+# which redistributes it under the Bruker licence (LICENCE-BRUKER.txt). Pinned by
+# SHA256 of the sdist and of the library itself.
+ARG BRUKER_BRIDGE_VERSION=1.2.0
+ARG BRUKER_BRIDGE_URL="https://files.pythonhosted.org/packages/ad/b5/8c0ecc9aeb5c6fd763c180a990b1acf428884b06a2cab9119f77e00e971d/opentims_bruker_bridge-1.2.0.tar.gz"
+ARG BRUKER_BRIDGE_SHA256=e8349dfa4451c87cdff6aca642066c501c0e62b2c2bedba666e6c4935b215f5a
+ARG BRUKER_TIMSDATA_SHA256=5ab56155f3f595626562240b386cf6d7c5cc02a536cda414a4fd8e202c0a0d0f
 
 
 ### OpenMS base ###
@@ -82,6 +96,28 @@ RUN <<-EOF
     rm -rf /tmp/*
 EOF
 
+# installing ONNX Runtime (headers + shared library) for WITH_ONNX=ON
+ARG ONNXRUNTIME_VERSION
+ARG ONNXRUNTIME_SHA256_AMD64
+ARG ONNXRUNTIME_SHA256_ARM64
+ARG ONNXRUNTIME_DIR
+RUN <<-EOF
+    set -eux
+    case "${TARGETARCH}" in
+        amd64) ORT_ARCH="x64"; ORT_SHA256="${ONNXRUNTIME_SHA256_AMD64}" ;;
+        arm64) ORT_ARCH="aarch64"; ORT_SHA256="${ONNXRUNTIME_SHA256_ARM64}" ;;
+        *) echo "Unsupported architecture: ${TARGETARCH}" && exit 1 ;;
+    esac
+    ORT_NAME="onnxruntime-linux-${ORT_ARCH}-${ONNXRUNTIME_VERSION}"
+    wget "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/${ORT_NAME}.tgz" -O ort.tgz
+    echo "${ORT_SHA256}  ort.tgz" | sha256sum -c -
+    mkdir -p "${ONNXRUNTIME_DIR}"
+    tar xzf ort.tgz --strip-components=1 -C "${ONNXRUNTIME_DIR}"
+    test -f "${ONNXRUNTIME_DIR}/include/onnxruntime_cxx_api.h"
+    test -e "${ONNXRUNTIME_DIR}/lib/libonnxruntime.so"
+    rm -f ort.tgz
+EOF
+
 # Install the .NET 8 SDK for the openms-thermo-bridge build (WITH_THERMO_RAW).
 # The bridge's FindDotNetHost.cmake requires the nethost headers/library from
 # the official .NET SDK host pack under /usr/share/dotnet/packs/..., and runs
@@ -115,6 +151,12 @@ ARG BUILD_DIR
 ARG INSTALL_DIR
 ARG THIRDPARTY_DIR
 ARG MAKEFLAGS
+ARG TARGETARCH
+ARG ONNXRUNTIME_DIR
+ARG BRUKER_BRIDGE_VERSION
+ARG BRUKER_BRIDGE_URL
+ARG BRUKER_BRIDGE_SHA256
+ARG BRUKER_TIMSDATA_SHA256
 ENV MAKEFLAGS="${MAKEFLAGS}"
 
 COPY . ${SOURCE_DIR}
@@ -170,7 +212,8 @@ RUN <<-EOF
         -DOPENMS_USE_VCPKG=OFF \
         -DQt6_DIR="/usr/lib/${DEB_ARCH}/cmake/Qt6" \
         -DCMAKE_BUILD_TYPE='Release' \
-        -DCMAKE_PREFIX_PATH="/usr/;/usr/local" \
+        -DCMAKE_PREFIX_PATH="/usr/;/usr/local;${ONNXRUNTIME_DIR}" \
+        -DWITH_ONNX=ON \
         -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR} \
         -S ${SOURCE_DIR} \
         -B ${BUILD_DIR}
@@ -179,6 +222,70 @@ EOF
 WORKDIR ${BUILD_DIR}
 RUN make all
 RUN make install/strip
+
+# ONNX Runtime: libOpenMS needs libonnxruntime.so.1 at runtime. Copy the library
+# with its SONAME symlinks next to libOpenMS (the install rule copies only the
+# unversioned name), plus its MIT licence and third-party notices; and check that
+# the PeptDeep models were installed.
+RUN <<-EOF
+    set -eux
+    cp -a "${ONNXRUNTIME_DIR}"/lib/libonnxruntime.so* "${INSTALL_DIR}/lib/"
+    mkdir -p "${INSTALL_DIR}/share/OpenMS/LICENSES/onnxruntime"
+    cp "${ONNXRUNTIME_DIR}/LICENSE" "${ONNXRUNTIME_DIR}/ThirdPartyNotices.txt" "${ONNXRUNTIME_DIR}/VERSION_NUMBER" \
+       "${INSTALL_DIR}/share/OpenMS/LICENSES/onnxruntime/"
+    for m in peptdeep_ms2_dynamic.onnx peptdeep_rt_dynamic.onnx peptdeep_ccs_dynamic.onnx; do
+      test -s "${INSTALL_DIR}/share/OpenMS/models/${m}"
+    done
+    mkdir -p "${INSTALL_DIR}/share/OpenMS/LICENSES/peptdeep_models"
+    printf '%s\n' \
+      "share/OpenMS/models/peptdeep_*_dynamic.onnx are ONNX exports of the pretrained" \
+      "AlphaPeptDeep models (https://github.com/MannLabs/alphapeptdeep)," \
+      "Copyright (c) Mann Labs, licensed under the Apache License 2.0" \
+      "(https://www.apache.org/licenses/LICENSE-2.0)." \
+      > "${INSTALL_DIR}/share/OpenMS/LICENSES/peptdeep_models/NOTICE.txt"
+    # the runtime images have no ${ONNXRUNTIME_DIR}: libOpenMS must find ONNX Runtime without it
+    mv "${ONNXRUNTIME_DIR}" "${ONNXRUNTIME_DIR}.hidden"
+    ldd "${INSTALL_DIR}/lib/libOpenMS.so" | grep onnxruntime
+    if ! ldd "${INSTALL_DIR}/lib/libOpenMS.so" | grep -q "libonnxruntime.so.1 => ${INSTALL_DIR}/lib/"; then
+      echo "libOpenMS does not resolve ONNX Runtime from ${INSTALL_DIR}/lib"; exit 1
+    fi
+    mv "${ONNXRUNTIME_DIR}.hidden" "${ONNXRUNTIME_DIR}"
+EOF
+
+# Bruker TDF-SDK, amd64 only (Bruker ships no Linux/aarch64 build). BrukerTimsFile
+# finds it at share/OpenMS/vendor/bruker_sdk/libtimsdata.so without any environment
+# variable and then uses it for m/z and 1/K0; elsewhere it logs a warning that m/z
+# is an open-source approximation. The Bruker licence (redist.txt) requires
+# LICENCE-BRUKER.txt and THIRD-PARTY-LICENSE-README.txt to accompany the library;
+# the library is not modified (licence section 3.1) and only loaded at runtime
+# via dlopen by OpenMS (BSD-3-Clause), which requires it for exact Bruker m/z.
+RUN <<-EOF
+    set -eux
+    if [ "${TARGETARCH}" != "amd64" ]; then
+      echo "No Bruker TDF-SDK for ${TARGETARCH}: Bruker .d m/z will be the open-source approximation."
+      exit 0
+    fi
+    SDK_DIR="${INSTALL_DIR}/share/OpenMS/vendor/bruker_sdk"
+    wget "${BRUKER_BRIDGE_URL}" -O /tmp/obb.tar.gz
+    echo "${BRUKER_BRIDGE_SHA256}  /tmp/obb.tar.gz" | sha256sum -c -
+    mkdir -p /tmp/obb "${SDK_DIR}"
+    tar xzf /tmp/obb.tar.gz -C /tmp/obb
+    OBB="/tmp/obb/opentims_bruker_bridge-${BRUKER_BRIDGE_VERSION}"
+    echo "${BRUKER_TIMSDATA_SHA256}  ${OBB}/opentims_bruker_bridge/libtimsdata.so" | sha256sum -c -
+    install -m 0755 "${OBB}/opentims_bruker_bridge/libtimsdata.so" "${SDK_DIR}/libtimsdata.so"
+    install -m 0644 "${OBB}/LICENCE-BRUKER.txt" "${OBB}/THIRD-PARTY-LICENSE-README.txt" "${OBB}/redist.txt" "${SDK_DIR}/"
+    printf '%s\n' \
+      "libtimsdata.so: Bruker TDF-SDK, redistributed unmodified from opentims_bruker_bridge ${BRUKER_BRIDGE_VERSION} (PyPI)." \
+      "It may only be used and redistributed under LICENCE-BRUKER.txt and THIRD-PARTY-LICENSE-README.txt (see redist.txt)." \
+      "OpenMS loads it at runtime to read Bruker timsTOF .d files with exact m/z and 1/K0 calibration." \
+      "" \
+      "This software uses Software software. Copyright © 2019 by Bruker Daltonik GmbH. All rights reserved." \
+      > "${SDK_DIR}/README.txt"
+    # every shared library it needs must also be in the runtime images
+    ldd "${SDK_DIR}/libtimsdata.so"
+    if ldd "${SDK_DIR}/libtimsdata.so" | grep -q "not found"; then exit 1; fi
+    rm -rf /tmp/obb /tmp/obb.tar.gz
+EOF
 
 
 ### OpenMS library ###
@@ -241,6 +348,9 @@ COPY --from=build ${INSTALL_DIR}/include ${INSTALL_DIR}/include
 COPY --from=build ${INSTALL_DIR}/share ${INSTALL_DIR}/share
 
 LABEL software="OpenMS (library)"
+# amd64 images bundle the Bruker TDF-SDK (share/OpenMS/vendor/bruker_sdk, see README.txt there)
+LABEL org.openms.bruker-sdk="linux/amd64 only: share/OpenMS/vendor/bruker_sdk/libtimsdata.so. This software uses Software software. Copyright © 2019 by Bruker Daltonik GmbH. All rights reserved."
+LABEL org.openms.onnxruntime="ONNX Runtime (MIT) in lib/, PeptDeep models (Apache-2.0) in share/OpenMS/models"
 
 
 ### OpenMS tools runtime ###
@@ -326,6 +436,9 @@ EOF
 
 COPY --from=build ${SOURCE_DIR} ${SOURCE_DIR}
 COPY --from=build ${BUILD_DIR} ${BUILD_DIR}
+# the build-tree binaries link ONNX Runtime from its build location
+ARG ONNXRUNTIME_DIR
+COPY --from=build ${ONNXRUNTIME_DIR} ${ONNXRUNTIME_DIR}
 
 WORKDIR ${BUILD_DIR}
 RUN xvfb-run -a ctest --output-on-failure -j${NUM_BUILD_CORES}

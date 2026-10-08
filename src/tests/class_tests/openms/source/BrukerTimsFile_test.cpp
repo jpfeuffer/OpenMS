@@ -459,6 +459,36 @@ START_SECTION(DDA loading integration test)
 }
 END_SECTION
 
+START_SECTION([EXTRA] Bruker SDK given explicitly but not loadable is an error and not a fallback)
+{
+  BrukerTimsFile f;
+  BrukerTimsFile::Config cfg;
+  cfg.export_mode = BrukerTimsFile::Config::FRAME;
+  cfg.frame_id_min = 1;
+  cfg.frame_id_max = 2;
+  cfg.bruker_sdk_path = "/nonexistent/libtimsdata.so";
+
+  // AUTO: an explicit SDK path expresses intent, so failing to load it must throw
+  MSExperiment exp_auto;
+  TEST_EXCEPTION(Exception::FileNotReadable, f.load(OPENTIMS_DDA_TEST_DATA, exp_auto, cfg));
+
+  // BRUKER_SDK: same
+  cfg.tims_calibration_strategy = BrukerTimsFile::Config::TimsCalibrationStrategy::BRUKER_SDK;
+  MSExperiment exp_sdk;
+  TEST_EXCEPTION(Exception::FileNotReadable, f.load(OPENTIMS_DDA_TEST_DATA, exp_sdk, cfg));
+
+  // RATIONAL / LINEAR never touch the SDK, so the bogus path is irrelevant
+  cfg.tims_calibration_strategy = BrukerTimsFile::Config::TimsCalibrationStrategy::RATIONAL;
+  MSExperiment exp_rational;
+  f.load(OPENTIMS_DDA_TEST_DATA, exp_rational, cfg);
+  TEST_EQUAL(exp_rational.size(), 2);
+  cfg.tims_calibration_strategy = BrukerTimsFile::Config::TimsCalibrationStrategy::LINEAR;
+  MSExperiment exp_linear;
+  f.load(OPENTIMS_DDA_TEST_DATA, exp_linear, cfg);
+  TEST_EQUAL(exp_linear.size(), 2);
+}
+END_SECTION
+
 START_SECTION(DDA native ID format test)
 {
   // Contract: DDA MS2 native IDs are "frame=<F> scan=<S> precursor=<P>".

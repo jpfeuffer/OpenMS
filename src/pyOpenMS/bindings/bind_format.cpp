@@ -204,7 +204,8 @@ This class is only available when OpenMS is built with
 ``WITH_OPENTIMS=ON`` (the default). The Bruker SDK
 (``timsdata.dll`` / ``libtimsdata.so``) is not bundled with pyOpenMS;
 supply it via the ``OPENMS_BRUKER_SDK_PATH`` environment variable or
-``Config.bruker_sdk_path``.
+``Config.bruker_sdk_path`` for exact m/z and 1/K0. Without it, m/z uses an
+open-source approximation (a warning is logged).
 
 Use ``hasattr(pyopenms, "BrukerTimsFile")`` to feature-detect at
 runtime.
@@ -250,7 +251,7 @@ runtime.
         .def_rw("export_mode", &OpenMS::BrukerTimsFile::Config::export_mode, "AUTO detects DDA vs DIA; SPECTRUM forces per-precursor; FRAME returns raw 4D frames")
         .def_rw("tims_calibration_strategy", &OpenMS::BrukerTimsFile::Config::tims_calibration_strategy, "Strategy for converting TIMS scan indices to 1/K0 values")
         .def_rw("pressure_compensation", &OpenMS::BrukerTimsFile::Config::pressure_compensation, "Pressure compensation strategy (only effective with BRUKER_SDK calibration)")
-        .def_rw("bruker_sdk_path", &OpenMS::BrukerTimsFile::Config::bruker_sdk_path, "Path to Bruker SDK library (empty = discover from OPENMS_BRUKER_SDK_PATH env var)")
+        .def_rw("bruker_sdk_path", &OpenMS::BrukerTimsFile::Config::bruker_sdk_path, "Path to Bruker SDK library (empty = OPENMS_BRUKER_SDK_PATH env var, else bundled <OpenMS share>/vendor/bruker_sdk/)")
         ;
 
     nb::enum_<OpenMS::BrukerTimsFile::Config::CentroidAlgo>(brukertimsfile_config, "CentroidAlgo")

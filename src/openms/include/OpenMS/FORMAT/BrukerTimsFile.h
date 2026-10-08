@@ -189,8 +189,24 @@ namespace OpenMS
       enum ExportMode { AUTO, SPECTRUM, FRAME };
       ExportMode export_mode = AUTO;       ///< AUTO detects DDA vs DIA; SPECTRUM forces per-precursor; FRAME returns raw 4D frames
 
-      /// Strategy for converting TIMS scan indices to 1/K0 values.
-      /// AUTO (default): tries Bruker SDK → rational (TimsCalibration table) → linear.
+      /**
+        @brief Strategy for converting TOF indices to m/z and TIMS scan indices to 1/K0.
+
+        AUTO (default): tries Bruker SDK → rational (TimsCalibration table) → linear.
+
+        With the Bruker SDK, both m/z and 1/K0 come from the SDK (exact; logged as
+        "TIMS calibration: Bruker SDK (m/z + 1/K0)"). Without it, m/z comes from the
+        open-source converter, which is linear in sqrt(m/z) and ignores the MzCalibration
+        table (deviations of tens of ppm are possible; a warning is logged), and 1/K0 from the
+        rational TimsCalibration model (exact for supported tables) or the linear fallback.
+
+        The SDK library is located, in order, via bruker_sdk_path, the OPENMS_BRUKER_SDK_PATH
+        environment variable, or a bundled copy at
+        `<OpenMS share>/vendor/bruker_sdk/libtimsdata.so` (`timsdata.dll` on Windows).
+        If the SDK was given explicitly (bruker_sdk_path or OPENMS_BRUKER_SDK_PATH) but cannot be
+        loaded, opening the file throws even in AUTO mode; a bundled SDK that fails to load only
+        produces a warning. The SDK exists only for x86-64 Linux and Windows.
+      */
       enum class TimsCalibrationStrategy { AUTO, BRUKER_SDK, RATIONAL, LINEAR };
       TimsCalibrationStrategy tims_calibration_strategy = TimsCalibrationStrategy::AUTO;
 
@@ -201,7 +217,8 @@ namespace OpenMS
       PressureCompensation pressure_compensation = PressureCompensation::NONE;
 
       /// Path to Bruker SDK library (timsdata.dll / libtimsdata.so).
-      /// Empty string (default): discover from OPENMS_BRUKER_SDK_PATH env var.
+      /// Empty string (default): use OPENMS_BRUKER_SDK_PATH, else a bundled SDK in
+      /// `<OpenMS share>/vendor/bruker_sdk/`. A non-empty path that fails to load throws.
       std::string bruker_sdk_path;
     };
 

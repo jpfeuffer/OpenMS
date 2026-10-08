@@ -1517,12 +1517,37 @@ namespace OpenMS
   // =====================================================================
   using Config = BrukerTimsFile::Config;
 
+  /// Bruker attribution required by the TDF-SDK licence (section 4.4) wherever the SDK is used.
+  static const char* const BRUKER_SDK_ATTRIBUTION =
+    "This software uses Software software. Copyright \xC2\xA9 2019 by Bruker Daltonik GmbH. All rights reserved.";
+
+  /// Where a Bruker SDK shipped alongside OpenMS is looked up when neither
+  /// Config::bruker_sdk_path nor OPENMS_BRUKER_SDK_PATH is set.
+  static std::string discoverBundledBrukerSdk()
+  {
+#ifdef OPENMS_WINDOWSPLATFORM
+    const char* lib_name = "timsdata.dll";
+#else
+    const char* lib_name = "libtimsdata.so";
+#endif
+    try
+    {
+      const std::string candidate = File::getOpenMSDataPath() + "/vendor/bruker_sdk/" + lib_name;
+      if (File::exists(candidate)) return candidate;
+    }
+    catch (const Exception::BaseException&)
+    {
+      // no usable data path: nothing bundled to discover
+    }
+    return {};
+  }
+
   static std::unique_ptr<TimsDataHandle> openTimsDataHandle(
     const std::string& path, const Config& config = Config())
   {
     std::string path_string = path;
 
-    // 1. Always create handle with linear converters (safe baseline)
+    // 1. Always create handle with open-source converters (safe baseline)
     auto& tof_factory = OpenSourceTof2MzConverterFactory::instance();
     auto& im_factory = OpenSourceScan2ImConverterFactory::instance();
 
@@ -1555,14 +1580,27 @@ namespace OpenMS
                       << std::endl;
     }
 
-    // 2. Try Bruker SDK (AUTO or BRUKER_SDK)
+    // 2. Try Bruker SDK (AUTO or BRUKER_SDK) for both m/z and 1/K0
     if (strategy == Strategy::AUTO || strategy == Strategy::BRUKER_SDK)
     {
+      // An SDK path given via Config or OPENMS_BRUKER_SDK_PATH is an explicit request and
+      // must not silently fall back; a bundled SDK found next to OpenMS is opportunistic.
       std::string sdk_path = config.bruker_sdk_path;
+      std::string sdk_source = "Config::bruker_sdk_path";
       if (sdk_path.empty())
       {
         const char* env = std::getenv("OPENMS_BRUKER_SDK_PATH");
-        if (env) sdk_path = env;
+        if (env && *env)
+        {
+          sdk_path = env;
+          sdk_source = "OPENMS_BRUKER_SDK_PATH";
+        }
+      }
+      const bool explicit_sdk = !sdk_path.empty();
+      if (!explicit_sdk)
+      {
+        sdk_path = discoverBundledBrukerSdk();
+        sdk_source = "bundled";
       }
 
       if (!sdk_path.empty())
@@ -1570,31 +1608,42 @@ namespace OpenMS
         try
         {
           auto pcs = mapPressureCompensation(config.pressure_compensation);
-          handle->scan2inv_ion_mobility_converter =
-            BrukerScan2InvIonMobilityConverterFactory::instance(sdk_path)
-              .produce(*handle, pcs);
-          OPENMS_LOG_INFO << "TIMS calibration: Bruker SDK"
+          // Produce both before assigning, so a failure leaves the open-source baseline intact.
+          auto tof2mz = BrukerTof2MzConverterFactory::instance(sdk_path).produce(*handle, pcs);
+          auto scan2im = BrukerScan2InvIonMobilityConverterFactory::instance(sdk_path).produce(*handle, pcs);
+          handle->tof2mz_converter = std::move(tof2mz);
+          handle->scan2inv_ion_mobility_converter = std::move(scan2im);
+          OPENMS_LOG_INFO << "TIMS calibration: Bruker SDK (m/z + 1/K0)"
                           << (pcs != NoPressureCompensation ? " (pressure_comp=on)" : "")
-                          << std::endl;
+                          << " [" << sdk_source << ": " << sdk_path << "]" << std::endl;
+          OPENMS_LOG_INFO << BRUKER_SDK_ATTRIBUTION << std::endl;
           return handle;
         }
         catch (const std::exception& e)
         {
-          if (strategy == Strategy::BRUKER_SDK)
+          if (strategy == Strategy::BRUKER_SDK || explicit_sdk)
           {
             throw Exception::FileNotReadable(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION,
-              std::string("Bruker SDK failed: ") + e.what());
+              "Bruker SDK from " + sdk_source + " ('" + sdk_path + "') could not be used for "
+              + path + ": " + e.what());
           }
-          OPENMS_LOG_DEBUG << "Bruker SDK not available (" << e.what()
-                          << "), trying rational" << std::endl;
+          OPENMS_LOG_WARN << "Bundled Bruker SDK '" << sdk_path << "' could not be used ("
+                          << e.what() << "); falling back to open-source calibration." << std::endl;
         }
       }
       else if (strategy == Strategy::BRUKER_SDK)
       {
         throw Exception::FileNotReadable(__FILE__, __LINE__, OPENMS_PRETTY_FUNCTION,
-          "Bruker SDK path not set (use OPENMS_BRUKER_SDK_PATH or Config::bruker_sdk_path)");
+          "Bruker SDK path not set and no bundled SDK found (use OPENMS_BRUKER_SDK_PATH, "
+          "Config::bruker_sdk_path, or install it to <OpenMS share>/vendor/bruker_sdk/)");
       }
     }
+
+    // Without the SDK, m/z comes from opentims' open-source converter, which is linear in
+    // sqrt(m/z) on GlobalMetadata and ignores the MzCalibration table.
+    OPENMS_LOG_WARN << "TIMS m/z calibration: open-source linear approximation (not exact; "
+                       "errors of tens of ppm are possible). Set OPENMS_BRUKER_SDK_PATH to the "
+                       "Bruker TDF-SDK (libtimsdata.so / timsdata.dll) for exact m/z." << std::endl;
 
     // 3. Try rational model from TimsCalibration table (AUTO or RATIONAL)
     if (strategy == Strategy::AUTO || strategy == Strategy::RATIONAL)
@@ -2605,7 +2654,13 @@ namespace OpenMS
 
     // OLS recalibration for DDA (when config.calibrate == true)
     const double cal_tol = (config.calibration_tolerance > 0.0) ? config.calibration_tolerance : 0.1;
-    if (config.calibrate)
+    const bool open_source_mz = dynamic_cast< ::OpenSourceTof2MzConverter*>(handle.tof2mz_converter.get()) != nullptr;
+    if (config.calibrate && !open_source_mz)
+    {
+      OPENMS_LOG_INFO << "OLS m/z recalibration skipped: m/z comes from the Bruker SDK, whose "
+                         "calibration is exact." << std::endl;
+    }
+    if (config.calibrate && open_source_mz)
     {
       // Collect (tof_index, sqrt(monoisotopic_mz)) pairs for regression
       std::vector<double> tof_vals;
@@ -2697,11 +2752,17 @@ namespace OpenMS
       std::vector<uint32_t> all_tofs;
       std::vector<uint64_t> all_intensities;
       std::vector<double> all_im;
+      // m/z of each raw peak as converted for its own frame (exact per-frame calibration)
+      std::vector<double> all_frame_mz;
       double rt_sum = 0.0;
+      // Valid frame used to convert merged TOF centroids back to m/z. The Bruker SDK
+      // calibrates per frame and rejects frame id 0, so it must be a real frame.
+      uint32_t ref_frame_id = 0;
 
       for (const DDAPrecursorInfo* entry : entries)
       {
         if (!handle.has_frame(entry->frame_id)) continue;
+        if (ref_frame_id == 0) ref_frame_id = entry->frame_id;
 
         const FrameData& fd = getFrameData(entry->frame_id);
         rt_sum += fd.rt;
@@ -2713,6 +2774,7 @@ namespace OpenMS
           all_tofs.push_back(fd.tofs[p]);
           all_intensities.push_back(static_cast<uint64_t>(fd.intensities[p]));
           all_im.push_back(fd.inv_ion_mobilities[p]);
+          all_frame_mz.push_back(fd.mzs[p]);
         }
       }
 
@@ -2735,11 +2797,10 @@ namespace OpenMS
       const auto dda_ms2_algo = effectiveMS2Algo(config, /*emit_warnings=*/false);
       if (dda_ms2_algo == BrukerTimsFile::Config::CentroidAlgo::HILL_BASED)
       {
-        std::vector<double> hb_mz(all_tofs.size());
+        std::vector<double> hb_mz = std::move(all_frame_mz);
         std::vector<double> hb_int(all_tofs.size());
         for (std::size_t i = 0; i < all_tofs.size(); ++i)
         {
-          handle.tof2mz_converter->convert(0, &hb_mz[i], &all_tofs[i], 1);
           hb_int[i] = static_cast<double>(all_intensities[i]);
         }
         Internal::PASEFHillCentroider::Params p;
@@ -2889,17 +2950,23 @@ namespace OpenMS
       all_intensity_d.reserve(all_tofs.size());
       kept_im.reserve(all_tofs.size());
 
+      std::vector<uint32_t> kept_tofs;
+      kept_tofs.reserve(all_tofs.size());
       for (size_t i = 0; i < all_tofs.size(); ++i)
       {
         if (keep[i])
         {
-          // Convert TOF to m/z using the registered converter
-          double mz = 0;
-          handle.tof2mz_converter->convert(0, &mz, &all_tofs[i], 1);
-          all_mz.push_back(mz);
+          kept_tofs.push_back(all_tofs[i]);
           all_intensity_d.push_back(static_cast<double>(all_intensities[i]));
           kept_im.push_back(all_im[i]);
         }
+      }
+      // Convert TOF to m/z with the registered converter, in one batch
+      all_mz.resize(kept_tofs.size());
+      if (!kept_tofs.empty())
+      {
+        handle.tof2mz_converter->convert(ref_frame_id, all_mz.data(), kept_tofs.data(),
+                                         static_cast<uint32_t>(kept_tofs.size()));
       }
 
       if (all_mz.empty())

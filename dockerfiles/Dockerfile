@@ -223,13 +223,11 @@ WORKDIR ${BUILD_DIR}
 RUN make all
 RUN make install/strip
 
-# ONNX Runtime: libOpenMS needs libonnxruntime.so.1 at runtime. Copy the library
-# with its SONAME symlinks next to libOpenMS (the install rule copies only the
-# unversioned name), plus its MIT licence and third-party notices; and check that
-# the PeptDeep models were installed.
+# ONNX Runtime: add its MIT licence and third-party notices (the library and its
+# SONAME symlinks are installed by `make install`), and check that the PeptDeep
+# models were installed.
 RUN <<-EOF
     set -eux
-    cp -a "${ONNXRUNTIME_DIR}"/lib/libonnxruntime.so* "${INSTALL_DIR}/lib/"
     mkdir -p "${INSTALL_DIR}/share/OpenMS/LICENSES/onnxruntime"
     cp "${ONNXRUNTIME_DIR}/LICENSE" "${ONNXRUNTIME_DIR}/ThirdPartyNotices.txt" "${ONNXRUNTIME_DIR}/VERSION_NUMBER" \
        "${INSTALL_DIR}/share/OpenMS/LICENSES/onnxruntime/"

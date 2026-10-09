@@ -165,6 +165,9 @@ TOPP tools:
         built without ONNX, a model is missing or cannot be loaded, or no PSM received
         predicted features. On success it logs '[PeptDeepRescoring] Predicted features
         added: N / M PSMs (<features>), NCE=<nce>'.
+      - PARAM: New -out writes the per-file identifications as idXML or as an idparquet bundle
+        (format by extension), like CometAdapter and SageAdapter. -out_idxml (idXML only) is
+        deprecated; it still works but cannot be combined with -out. -out_merged accepts idparquet.
     IDFileConverter:
       - TSV import: the hits of a line get their rank as score (score type 'rank', lower is
         better) instead of no score.
